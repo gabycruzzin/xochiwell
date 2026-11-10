@@ -1,6 +1,10 @@
 import { useRef, useState, type FormEvent } from "react";
-import { searchFoods, type Food, type Macros, type Serving } from "./api";
+import { Capacitor } from "@capacitor/core";
+import { lookupBarcode, searchFoods, type Food, type Macros, type Serving } from "./api";
 import type { NewEntry } from "./db";
+
+// The barcode scanner uses the phone's camera, so it's offered in the iOS app only.
+const canScan = Capacitor.isNativePlatform();
 
 export const MEALS = ["Breakfast", "Lunch", "Dinner", "Snacks"];
 const SERVING_STEP = 0.5;
@@ -77,6 +81,49 @@ export default function FoodSearch({
     }
   };
 
+  // Opens the camera; a recognized barcode shows that one food, opened and ready to add.
+  const scan = async () => {
+    searchCtrl.current?.abort();
+    const ctrl = (searchCtrl.current = new AbortController());
+    let code: string;
+    try {
+      // Loaded on first use, since the scanner library is only needed here.
+      const { CapacitorBarcodeScanner, CapacitorBarcodeScannerTypeHintALLOption } = await import("@capacitor/barcode-scanner");
+      const { ScanResult } = await CapacitorBarcodeScanner.scanBarcode({
+        hint: CapacitorBarcodeScannerTypeHintALLOption.ALL,
+        scanInstructions: "Point the camera at the barcode",
+      });
+      code = ScanResult.trim();
+    } catch (e) {
+      const err = e as { code?: string; message?: string };
+      if (err.code === "OS-PLUG-BARC-0006") return; // closed the scanner
+      setStatus(err.code === "OS-PLUG-BARC-0007"
+        ? "Xochiwell needs camera access to scan. Turn it on in Settings → Xochiwell → Camera."
+        : "Couldn't scan that. Try again, or search by name.");
+      return;
+    }
+    if (!/^\d{6,14}$/.test(code)) return setStatus("That doesn't look like a food barcode. Try again, or search by name.");
+    setStatus("Looking up barcode…");
+    setSelected(null);
+    try {
+      const found = await lookupBarcode(code, ctrl.signal);
+      if (ctrl.signal.aborted) return;
+      if ("food" in found) {
+        setResults([found.food]);
+        setSelected(found.food.id);
+        setServings(1);
+        setStatus("");
+      } else {
+        setResults([]);
+        setStatus(found.missing === "nutrition"
+          ? "Found that product, but it has no nutrition facts listed. Try searching by name."
+          : "That barcode isn't in the food database yet. Try searching by name.");
+      }
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") setStatus("Lookup failed. Check your connection and try again.");
+    }
+  };
+
   const toggle = (id: string) => {
     setSelected(selected === id ? null : id);
     setServings(1);
@@ -96,6 +143,7 @@ export default function FoodSearch({
         <input placeholder={placeholder} value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search foods"
           autoFocus={autoFocus} enterKeyHint="search" />
         <button type="submit">Search</button>
+        {canScan && <button type="button" className="ghost scan" onClick={scan} aria-label="Scan a barcode">Scan</button>}
       </form>
       {status && <p className="note" role="status">{status}</p>}
       <ul className="results">

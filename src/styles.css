@@ -123,3 +123,6 @@ footer.account .note { margin:0 0 6px; font-size:.85rem; } footer.account > .lin
 .confirm-delete { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
 .confirm-delete p { margin:0 0 12px; }
 button.danger { background:#8f3b30; border-color:#8f3b30; } button.danger:hover:not(:disabled) { background:#76302a; border-color:#76302a; }
+/* Search row: the box shrinks so search and scan stay on one line on a phone. */
+form[role=search] > input:first-child { flex:1 1 0; min-width:0; }
+button.scan { color:var(--ink); }

@@ -38,6 +38,8 @@ Or in Xcode: Product → Archive, then Distribute App → App Store Connect. The
 
 ## How it works
 - Food data comes from [Open Food Facts](https://world.openfoodfacts.org) (free, no key). See `src/api.ts`.
+- In the iOS app, **scan** next to the search box opens the camera ([@capacitor/barcode-scanner](https://capacitorjs.com/docs/apis/barcode-scanner))
+  and looks the barcode up in Open Food Facts (`lookupBarcode` in `src/api.ts`). The camera prompt's text is `NSCameraUsageDescription` in `ios/App/App/Info.plist`.
   The dev server proxies its API (see `vite.config.ts`); a hosted build needs the same proxy.
 - Accounts and data live in Supabase. See `src/db.ts`. Row level security in `supabase/schema.sql`
   means each user can only read and change their own rows.
@@ -47,4 +49,4 @@ Or in Xcode: Product → Archive, then Distribute App → App Store Connect. The
 
 ## Next steps
 - Add USDA FoodData Central for whole foods (use a small backend so the API key stays private)
-- Barcode scanning, custom foods and recipes
+- Custom foods and recipes (also for scanned barcodes that aren't in the database)

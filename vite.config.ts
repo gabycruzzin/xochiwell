@@ -11,6 +11,13 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api\/off/, ""),
         headers: { "User-Agent": "xochiwell/0.1 (food log)" },
       },
+      // Barcode lookups (one product by its code).
+      "/api/barcode": {
+        target: "https://world.openfoodfacts.org",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/barcode/, "/api/v2/product"),
+        headers: { "User-Agent": "xochiwell/0.1 (food log)" },
+      },
       // Product details (serving sizes) only live in the main Open Food Facts API.
       "/api/products": {
         target: "https://world.openfoodfacts.org",
