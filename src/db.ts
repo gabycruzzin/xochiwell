@@ -98,27 +98,32 @@ export type Profile = {
   targetsOn: boolean; // false = just track, with no goal bars
   goalsOfferDismissed: boolean;
   typicalDay: TypicalItem[] | null;
+  weightTracking: boolean; // optional, off unless turned on in settings
+  weightUnit: "lb" | "kg";
 };
 export const NEW_PROFILE: Profile = {
   setupChoice: null, reasons: [], activity: null, targetsOn: false, goalsOfferDismissed: false, typicalDay: null,
+  weightTracking: false, weightUnit: "lb",
 };
-const PROFILE_COLUMNS = "setup_choice, reasons, activity, targets_on, goals_offer_dismissed, typical_day";
 
 // null if this user has no profile yet.
 export async function loadProfile(): Promise<Profile | null> {
-  const { data, error } = await db().from("profiles").select(PROFILE_COLUMNS).maybeSingle();
+  // "*" so a profile still loads before newer columns (like weight_tracking) exist in the database.
+  const { data, error } = await db().from("profiles").select("*").maybeSingle();
   if (error) throw error;
   if (!data) return null;
   return {
     setupChoice: data.setup_choice, reasons: data.reasons ?? [], activity: data.activity, targetsOn: data.targets_on,
     goalsOfferDismissed: data.goals_offer_dismissed, typicalDay: data.typical_day,
+    weightTracking: data.weight_tracking ?? false, weightUnit: data.weight_unit === "kg" ? "kg" : "lb",
   };
 }
 
 export async function saveProfile(p: Profile) {
   const { error } = await db().from("profiles").upsert({
     setup_choice: p.setupChoice, reasons: p.reasons, activity: p.activity, targets_on: p.targetsOn,
-    goals_offer_dismissed: p.goalsOfferDismissed, typical_day: p.typicalDay, updated_at: new Date().toISOString(),
+    goals_offer_dismissed: p.goalsOfferDismissed, typical_day: p.typicalDay,
+    weight_tracking: p.weightTracking, weight_unit: p.weightUnit, updated_at: new Date().toISOString(),
   });
   if (error) throw error;
 }
@@ -177,4 +182,32 @@ export async function importLocalData(): Promise<number> {
     console.error("Importing browser data failed", e);
     return 0;
   }
+}
+
+// Optional weight tracking. Stored in kg; shown in the person's unit.
+export type WeighIn = { id: string; day: string; kg: number; note: string | null };
+export const KG_PER_LB = 0.45359237;
+
+export async function loadWeights(): Promise<WeighIn[]> {
+  const { data, error } = await db().from("weights").select("id, day, kg, note").order("day");
+  if (error) throw error;
+  return data.map((w) => ({ ...w, kg: Number(w.kg) }));
+}
+
+// One weigh-in per day: saving again for the same day replaces it.
+export async function saveWeight(day: string, kg: number, note: string | null): Promise<WeighIn> {
+  const { data, error } = await db().from("weights").upsert({ day, kg, note }, { onConflict: "user_id,day" })
+    .select("id, day, kg, note").single();
+  if (error) throw error;
+  return { ...data, kg: Number(data.kg) };
+}
+
+export async function deleteWeight(id: string) {
+  const { error } = await db().from("weights").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteAllWeights() {
+  const { error } = await db().from("weights").delete().not("id", "is", null); // RLS limits this to the person's own rows
+  if (error) throw error;
 }

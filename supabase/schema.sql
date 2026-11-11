@@ -45,7 +45,9 @@ create table if not exists public.profiles (
   activity text check (activity in ('low', 'moderate', 'high')),
   targets_on boolean not null default false,                    -- false = just track, no goal bars
   goals_offer_dismissed boolean not null default false,         -- the one-time "want help setting goals?" offer
-  typical_day jsonb,                                            -- foods they listed as a normal day, kept apart from the diary
+  typical_day jsonb,
+  weight_tracking boolean not null default false,                 -- optional weight tracking, off by default
+  weight_unit text not null default 'lb' check (weight_unit in ('lb', 'kg')),                                            -- foods they listed as a normal day, kept apart from the diary
   updated_at timestamptz not null default now()
 );
 
@@ -82,3 +84,18 @@ $$;
 
 revoke all on function public.delete_my_account() from public, anon;
 grant execute on function public.delete_my_account() to authenticated;
+
+-- Optional weigh-ins, one per person per day, stored in kilograms.
+create table if not exists public.weights (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  day date not null,
+  kg numeric not null check (kg > 0 and kg < 700),
+  note text,
+  created_at timestamptz not null default now(),
+  unique (user_id, day)
+);
+alter table public.weights enable row level security;
+drop policy if exists "own weights" on public.weights;
+create policy "own weights" on public.weights
+  for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());

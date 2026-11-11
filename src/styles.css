@@ -192,3 +192,33 @@ button.scan { color:var(--ink); }
 .try-card { padding:16px; border-radius:16px; background:color-mix(in srgb, var(--latte) 20%, var(--card)); }
 .try-card h3 { color:var(--ink); } .try-card p { margin:0; }
 .report-signoff { margin:4px 0 8px; text-align:center; color:var(--mute); }
+/* Header: wordmark with the settings button on the right. */
+.header-top { display:flex; justify-content:space-between; align-items:center; width:100%; }
+button.icon-btn, button.icon-btn:hover:not(:disabled) { width:44px; height:44px; padding:0; display:grid; place-items:center; background:none; border-color:transparent; color:var(--mute); }
+button.icon-btn:active { color:var(--ink); }
+/* Settings */
+.sheet.settings, .sheet.weight { height:auto; max-height:92vh; }
+.settings-group { padding:16px; margin-bottom:12px; background:var(--card); border:1px solid var(--line); border-radius:16px; }
+.settings-group h3 { margin:0 0 10px; color:var(--ink); font-size:.95rem; } .settings-group .note { margin:0 0 8px; font-size:.88rem; }
+.settings-group .goals { margin:0 0 6px; } .settings-group .toggle-row { margin:0 0 8px; }
+.settings-links { display:flex; flex-wrap:wrap; gap:6px 18px; } .settings-links .link { font-size:.88rem; text-transform:lowercase; }
+.optional { font-size:.75rem; font-weight:400; color:var(--mute); margin-left:6px; letter-spacing:0; }
+.unit-switch, .range-switch { display:inline-flex; padding:3px; gap:2px; border-radius:999px; background:var(--track); margin:0 0 12px; }
+.unit-switch button, .range-switch button { min-height:32px; padding:4px 14px; border-radius:999px; border:0; background:none; color:var(--mute); text-transform:none; font-size:.85rem; }
+.unit-switch button.on, .range-switch button.on, .unit-switch button.on:hover:not(:disabled), .range-switch button.on:hover:not(:disabled) { background:#fff; color:var(--ink); }
+.unit-switch button:hover:not(:disabled), .range-switch button:hover:not(:disabled) { background:none; color:var(--ink); }
+button.open-weight { display:block; width:100%; margin:0 0 10px; }
+/* Weight log */
+.weigh-in { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:16px; background:var(--card); border:1px solid var(--line); border-radius:16px; }
+.weigh-in label { display:grid; gap:4px; font-size:.82rem; color:var(--mute); } .weigh-in input { width:100%; min-width:0; }
+/* iOS gives date fields a fixed intrinsic width; let it shrink to the column. */
+.weigh-in input[type=date] { -webkit-appearance:none; appearance:none; display:block; min-height:44px; }
+.weigh-in .weigh-note, .weigh-in button { grid-column:1 / -1; }
+.weight-summary { margin:16px 2px; font-weight:500; }
+.weight-chart { margin-bottom:18px; } .trend-chart { width:100%; height:auto; display:block; }
+.trend-chart .grid { stroke:var(--line); stroke-width:1; } .trend-chart .axis { font-size:10px; fill:var(--mute); }
+.trend-chart .avg-line { fill:none; stroke:var(--ink); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+.trend-chart .dot { fill:var(--latte); stroke:var(--card); stroke-width:2; } .trend-chart .dot.on { fill:var(--ink); }
+.trend-chart .dot-hit { cursor:pointer; }
+.chart-caption { margin:6px 2px 0; font-size:.82rem; }
+.weight-history h3 { margin:0 0 4px; }

@@ -4,11 +4,13 @@ import type { Macros } from "./api";
 import {
   supabase, DEFAULT_GOALS, NEW_PROFILE, type Entry, type NewEntry, type Profile,
   loadDay, addEntry, addEntries, removeEntry, countEntries, loadGoals, saveGoals, loadProfile, saveProfile,
-  loadCustomServings, saveCustomServing, importLocalData, deleteAccount,
+  loadCustomServings, saveCustomServing, importLocalData, deleteAccount, deleteAllWeights,
 } from "./db";
 import AddSheet from "./AddSheet";
 import MacroChart from "./MacroChart";
 import WeeklyReport from "./WeeklyReport";
+import Settings from "./Settings";
+import WeightLog from "./WeightLog";
 import { canNotify, onWeeklyReminderTap, setWeeklyReminder, weeklyReminderOn } from "./notify";
 import { MEALS, MacroText, servingLabel, sumMacros } from "./FoodSearch";
 import Setup, { type SetupStep } from "./Setup";
@@ -112,8 +114,10 @@ function Tracker({ session }: { session: Session }) {
   const [ready, setReady] = useState(false);
   const [notice, setNotice] = useState("");
   const [addingTo, setAddingTo] = useState<string | null>(null); // meal whose add sheet is open
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const closeSettings = useCallback(() => setShowSettings(false), []);
+  const [showWeight, setShowWeight] = useState(false);
+  const closeWeight = useCallback(() => setShowWeight(false), []);
   const [showReport, setShowReport] = useState(false);
   const closeReport = useCallback(() => setShowReport(false), []);
   const [weeklyOn, setWeeklyOn] = useState(weeklyReminderOn);
@@ -270,7 +274,10 @@ function Tracker({ session }: { session: Session }) {
   return (
     <main onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <header>
-        <Title />
+        <div className="header-top">
+          <Title />
+          <button className="icon-btn" onClick={() => setShowSettings(true)} aria-label="Settings"><GearIcon /></button>
+        </div>
         <DateBar date={date} onChange={changeDay} />
       </header>
       {notice && <p className="note notice" role="status">{notice} <button className="link" onClick={() => setNotice("")}>Dismiss</button></p>}
@@ -302,23 +309,7 @@ function Tracker({ session }: { session: Session }) {
           );
         })}
         <MacroChart total={total} />
-        {targetsOn ? (
-          <details>
-            <summary>Edit daily goals</summary>
-            <div className="goals">
-              {bars.map(([label, k]) => (
-                <label key={k}>{label}
-                  <input type="number" min={0} value={goals[k]} onChange={(e) => changeGoal(k, Number(e.target.value))} />
-                </label>
-              ))}
-            </div>
-            <div className="goal-links">
-              <button className="link" onClick={() => setSetupStart("reasons")}>redo guided setup</button>
-              <button className="link" onClick={() => setSetupStart("typical")}>update my typical day</button>
-              <button className="link" onClick={() => updateProfile({ ...profile, targetsOn: false })}>turn off targets</button>
-            </div>
-          </details>
-        ) : (
+        {!targetsOn && (
           <div className="goal-links"><button className="link" onClick={() => setSetupStart("reasons")}>set goals</button></div>
         )}
       </section>
@@ -356,38 +347,32 @@ function Tracker({ session }: { session: Session }) {
         })}
       </section>
       </div>
-      <footer className="account">
-        <p className="note">Signed in as {session.user.email}</p>
-        {canNotify && (
-          <label className="toggle-row">
-            <input type="checkbox" checked={weeklyOn} onChange={(e) => toggleWeekly(e.target.checked)} />
-            <span>Weekly report every Saturday morning</span>
-          </label>
-        )}
-        {confirmDelete ? (
-          <div className="confirm-delete" role="alert">
-            <p>This permanently deletes your account, diary, goals and setup. It can't be undone.</p>
-            <div className="controls">
-              <button className="danger" disabled={deleting} onClick={() => {
-                setDeleting(true);
-                deleteAccount().catch((e) => { setDeleting(false); setConfirmDelete(false); fail("delete your account")(e); });
-              }}>{deleting ? "Deleting…" : "Delete forever"}</button>
-              <button className="ghost" disabled={deleting} onClick={() => setConfirmDelete(false)}>Keep my account</button>
-            </div>
-          </div>
-        ) : (
-          <div className="account-links">
-            <button className="link" onClick={openReport}>your week</button>
-            <button className="link" onClick={() => supabase!.auth.signOut()}>sign out</button>
-            <button className="link" onClick={() => setConfirmDelete(true)}>delete account</button>
-          </div>
-        )}
-      </footer>
+      {showSettings && (
+        <Settings email={session.user.email} profile={profile} goals={goals} onChangeGoal={changeGoal} onUpdateProfile={updateProfile}
+          onGuidedSetup={(start) => { setShowSettings(false); setSetupStart(start); }}
+          canNotify={canNotify} weeklyOn={weeklyOn} onToggleWeekly={toggleWeekly}
+          onOpenReport={() => { setShowSettings(false); openReport(); }}
+          onOpenWeight={() => { setShowSettings(false); setShowWeight(true); }}
+          onDeleteWeights={() => deleteAllWeights().catch((e) => { fail("delete your weight history")(e); throw e; })}
+          onSignOut={() => supabase!.auth.signOut()}
+          onDeleteAccount={() => deleteAccount().catch((e) => { fail("delete your account")(e); throw e; })}
+          onClose={closeSettings} />
+      )}
+      {showWeight && <WeightLog unit={profile.weightUnit} today={today()} onClose={closeWeight} onError={fail} />}
       {showReport && <WeeklyReport today={today()} goals={goals} targetsOn={targetsOn} onClose={closeReport} />}
       {addingTo && (
         <AddSheet meal={addingTo} date={date} customServings={customServings} onCustomServing={changeCustomServing}
           onAdd={add} onCopy={(list) => copyMeal(list, addingTo)} onClose={closeSheet} disabled={!ready} />
       )}
     </main>
+  );
+}
+
+function GearIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
   );
 }
