@@ -156,3 +156,39 @@ button.scan { color:var(--ink); }
 .macro-legend i { width:10px; height:10px; border-radius:50%; }
 .macro-legend b { font-weight:500; font-variant-numeric:tabular-nums; }
 .macro-legend small { color:var(--mute); text-align:right; font-variant-numeric:tabular-nums; }
+/* Weekly report sheet, weekend banner and the reminder toggle. */
+.report-ready { display:flex; flex-wrap:wrap; align-items:center; gap:4px 14px; }
+.toggle-row { display:flex; align-items:center; gap:10px; margin:6px 0 10px; font-size:.9rem; color:var(--ink); cursor:pointer; }
+.toggle-row input { width:20px; height:20px; min-height:0; padding:0; accent-color:var(--ink); }
+.sheet.report { height:auto; max-height:90vh; }
+.report-kicker { font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color:var(--mute); }
+.report-hero { display:flex; align-items:center; gap:14px; margin:4px 0 22px; }
+.report-hero h2 { margin:0 0 2px; font-size:1.6rem; text-transform:none; } .report-hero .note { margin:0; }
+.report-flower { width:56px; height:56px; flex-shrink:0; }
+/* Week at a glance */
+.week-strip { list-style:none; margin:0 0 18px; padding:14px 10px; display:grid; grid-template-columns:repeat(7, 1fr); gap:4px;
+  background:var(--card); border:1px solid var(--line); border-radius:16px; }
+.week-strip li { display:grid; justify-items:center; gap:6px; }
+.week-strip span { font-size:.75rem; color:var(--mute); }
+.week-strip i { width:30px; height:30px; border-radius:50%; display:grid; place-items:center; font-style:normal; font-size:.8rem;
+  border:1.5px dashed var(--line); color:#fff; }
+.week-strip li.on i { border:0; background:var(--latte); }
+.week-strip small { font-size:.7rem; color:var(--mute); font-variant-numeric:tabular-nums; }
+/* Stat cards, softly tinted */
+.report-stats { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:22px; }
+.report-stats div { display:grid; gap:2px; padding:14px 12px; border-radius:14px; background:var(--card); border:1px solid var(--line); }
+.report-stats div[data-k=days] { background:color-mix(in srgb, var(--latte) 16%, var(--card)); border-color:transparent; }
+.report-stats div[data-k=kcal] { background:color-mix(in srgb, var(--c-kcal) 18%, var(--card)); border-color:transparent; }
+.report-stats div[data-k=protein] { background:color-mix(in srgb, var(--c-protein) 14%, var(--card)); border-color:transparent; }
+.report-stats b { font:500 1.6rem/1.1 "Inter Tight", Inter, sans-serif; font-variant-numeric:tabular-nums; } .report-stats b small { font-size:.55em; color:var(--mute); }
+.report-stats span { font-size:.78rem; color:var(--mute); }
+.report-block { margin-bottom:20px; } .report-block h3 { margin:0 0 10px; }
+.report .macro-chart { border-top:0; padding-top:0; margin:0; }
+/* Highlights with check badges */
+.wins { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.wins li { display:flex; gap:12px; align-items:flex-start; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:14px; }
+.wins i { flex-shrink:0; width:22px; height:22px; border-radius:50%; display:grid; place-items:center; font-style:normal; font-size:.75rem;
+  color:#fff; background:var(--c-fat); margin-top:1px; }
+.try-card { padding:16px; border-radius:16px; background:color-mix(in srgb, var(--latte) 20%, var(--card)); }
+.try-card h3 { color:var(--ink); } .try-card p { margin:0; }
+.report-signoff { margin:4px 0 8px; text-align:center; color:var(--mute); }

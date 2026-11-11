@@ -8,6 +8,8 @@ import {
 } from "./db";
 import AddSheet from "./AddSheet";
 import MacroChart from "./MacroChart";
+import WeeklyReport from "./WeeklyReport";
+import { canNotify, onWeeklyReminderTap, setWeeklyReminder, weeklyReminderOn } from "./notify";
 import { MEALS, MacroText, servingLabel, sumMacros } from "./FoodSearch";
 import Setup, { type SetupStep } from "./Setup";
 import SignIn from "./SignIn";
@@ -112,6 +114,26 @@ function Tracker({ session }: { session: Session }) {
   const [addingTo, setAddingTo] = useState<string | null>(null); // meal whose add sheet is open
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const closeReport = useCallback(() => setShowReport(false), []);
+  const [weeklyOn, setWeeklyOn] = useState(weeklyReminderOn);
+  // On weekends a banner offers the new report until it's opened or dismissed, once per week (keyed by that Saturday).
+  const reportWeek = (() => { const d = new Date().getDay(); return d === 6 ? today() : d === 0 ? shiftDay(today(), -1) : null; })();
+  const [reportSeen, setReportSeen] = useState(() => { try { return localStorage.getItem("reportSeen"); } catch { return null; } });
+  const markReportSeen = () => {
+    setReportSeen(reportWeek);
+    try { if (reportWeek) localStorage.setItem("reportSeen", reportWeek); } catch { /* storage blocked */ }
+  };
+  const openReport = () => { markReportSeen(); setShowReport(true); };
+  useEffect(() => onWeeklyReminderTap(() => setShowReport(true)), []);
+  const toggleWeekly = (on: boolean) => {
+    setWeeklyReminder(on)
+      .then((ok) => {
+        if (ok) setWeeklyOn(on);
+        else setNotice("Notifications are turned off for Xochiwell. You can allow them in iPhone Settings → Xochiwell → Notifications.");
+      })
+      .catch(fail("change the weekly reminder"));
+  };
   const closeSheet = useCallback(() => setAddingTo(null), []);
   // Which way the day just changed, so its content slides in from that side.
   const [slide, setSlide] = useState<"prev" | "next" | null>(null);
@@ -252,6 +274,13 @@ function Tracker({ session }: { session: Session }) {
         <DateBar date={date} onChange={changeDay} />
       </header>
       {notice && <p className="note notice" role="status">{notice} <button className="link" onClick={() => setNotice("")}>Dismiss</button></p>}
+      {reportWeek && reportSeen !== reportWeek && (
+        <p className="note notice report-ready">
+          Your weekly report is ready 🌸
+          <button className="link" onClick={openReport}>view</button>
+          <button className="link" onClick={markReportSeen}>later</button>
+        </p>
+      )}
       <div key={date} className={`day-content${slide ? ` from-${slide}` : ""}`}>
       {date === today() && <p className="greeting">{greeting(entries, total, goals, targetsOn)}</p>}
 
@@ -329,6 +358,12 @@ function Tracker({ session }: { session: Session }) {
       </div>
       <footer className="account">
         <p className="note">Signed in as {session.user.email}</p>
+        {canNotify && (
+          <label className="toggle-row">
+            <input type="checkbox" checked={weeklyOn} onChange={(e) => toggleWeekly(e.target.checked)} />
+            <span>Weekly report every Saturday morning</span>
+          </label>
+        )}
         {confirmDelete ? (
           <div className="confirm-delete" role="alert">
             <p>This permanently deletes your account, diary, goals and setup. It can't be undone.</p>
@@ -342,11 +377,13 @@ function Tracker({ session }: { session: Session }) {
           </div>
         ) : (
           <div className="account-links">
+            <button className="link" onClick={openReport}>your week</button>
             <button className="link" onClick={() => supabase!.auth.signOut()}>sign out</button>
             <button className="link" onClick={() => setConfirmDelete(true)}>delete account</button>
           </div>
         )}
       </footer>
+      {showReport && <WeeklyReport today={today()} goals={goals} targetsOn={targetsOn} onClose={closeReport} />}
       {addingTo && (
         <AddSheet meal={addingTo} date={date} customServings={customServings} onCustomServing={changeCustomServing}
           onAdd={add} onCopy={(list) => copyMeal(list, addingTo)} onClose={closeSheet} disabled={!ready} />

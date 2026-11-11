@@ -25,6 +25,14 @@ export async function loadDay(day: string): Promise<Entry[]> {
   return data;
 }
 
+// Every entry from `from` to `to` (inclusive, YYYY-MM-DD), with its day.
+export async function loadRange(from: string, to: string): Promise<(Entry & { day: string })[]> {
+  const { data, error } = await db().from("diary_entries").select(`day, ${ENTRY_COLUMNS}`)
+    .gte("day", from).lte("day", to).order("day").order("created_at");
+  if (error) throw error;
+  return data;
+}
+
 export async function addEntry(day: string, entry: NewEntry): Promise<Entry> {
   const { data, error } = await db().from("diary_entries").insert({ ...entry, day }).select(ENTRY_COLUMNS).single();
   if (error) throw error;
