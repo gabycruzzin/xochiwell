@@ -7,6 +7,7 @@ import {
   loadCustomServings, saveCustomServing, importLocalData, deleteAccount,
 } from "./db";
 import AddSheet from "./AddSheet";
+import MacroChart from "./MacroChart";
 import { MEALS, MacroText, servingLabel, sumMacros } from "./FoodSearch";
 import Setup, { type SetupStep } from "./Setup";
 import SignIn from "./SignIn";
@@ -271,6 +272,7 @@ function Tracker({ session }: { session: Session }) {
             </div>
           );
         })}
+        <MacroChart total={total} />
         {targetsOn ? (
           <details>
             <summary>Edit daily goals</summary>
