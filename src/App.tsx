@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { Macros } from "./api";
 import {
@@ -12,6 +12,46 @@ import Setup, { type SetupStep } from "./Setup";
 import SignIn from "./SignIn";
 
 const today = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
+// Dates are handled at local noon so adding days never trips over daylight-saving changes.
+const atNoon = (day: string) => new Date(`${day}T12:00:00`);
+const shiftDay = (day: string, by: number) => {
+  const d = atNoon(day);
+  d.setDate(d.getDate() + by);
+  return d.toLocaleDateString("en-CA");
+};
+// "Today", "Yesterday", "Tomorrow", or a short date like "Mon, Nov 9" (with the year if it isn't this year).
+function dayName(day: string) {
+  const diff = Math.round((atNoon(day).getTime() - atNoon(today()).getTime()) / 86400000);
+  if (diff === 0) return "Today";
+  if (diff === -1) return "Yesterday";
+  if (diff === 1) return "Tomorrow";
+  const d = atNoon(day);
+  return d.toLocaleDateString("en-US", {
+    weekday: "short", month: "short", day: "numeric", ...(d.getFullYear() !== new Date().getFullYear() && { year: "numeric" }),
+  });
+}
+
+// Previous / next day arrows around the day's name; tapping the name opens the calendar.
+function DateBar({ date, onChange }: { date: string; onChange: (day: string) => void }) {
+  return (
+    <div className="date-nav">
+      <div className="date-bar">
+        <button className="ghost day-step" onClick={() => onChange(shiftDay(date, -1))} aria-label="Previous day">‹</button>
+        <label className="day-name">
+          {dayName(date)}
+          {/* Invisible but covering the label, so a tap opens the native calendar; showPicker covers desktop browsers. */}
+          <input type="date" value={date} aria-label="Pick a date" onChange={(e) => onChange(e.target.value || today())}
+            onClick={(e) => { try { e.currentTarget.showPicker(); } catch { /* not supported; the native tap still works */ } }} />
+        </label>
+        <button className="ghost day-step" onClick={() => onChange(shiftDay(date, 1))} aria-label="Next day">›</button>
+      </div>
+      {/* Space is kept even when hidden, so the page doesn't shift when switching days. */}
+      <button className="link back-today" onClick={() => onChange(today())} style={{ visibility: date === today() ? "hidden" : "visible" }}>
+        back to today
+      </button>
+    </div>
+  );
+}
 // The "want help setting goals?" offer appears once, after this many foods have been logged.
 const GOALS_OFFER_AFTER = 3;
 
@@ -72,6 +112,27 @@ function Tracker({ session }: { session: Session }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const closeSheet = useCallback(() => setAddingTo(null), []);
+  // Which way the day just changed, so its content slides in from that side.
+  const [slide, setSlide] = useState<"prev" | "next" | null>(null);
+  const changeDay = (day: string) => {
+    if (day === date) return;
+    setSlide(day > date ? "next" : "prev"); // YYYY-MM-DD strings sort by date
+    setEntries([]); // cleared in the same render, so the old day's foods never show under the new day's name
+    setDate(day);
+  };
+  // A quick, clearly sideways swipe changes the day; anything more vertical is left to scrolling.
+  const touchStart = useRef<{ x: number; y: number; at: number } | null>(null);
+  const onTouchStart = (e: TouchEvent) => {
+    const fromControl = (e.target as HTMLElement).closest(".sheet-backdrop, input, select, textarea");
+    touchStart.current = fromControl ? null : { x: e.touches[0].clientX, y: e.touches[0].clientY, at: Date.now() };
+  };
+  const onTouchEnd = (e: TouchEvent) => {
+    const start = touchStart.current;
+    touchStart.current = null;
+    if (!start) return;
+    const dx = e.changedTouches[0].clientX - start.x, dy = e.changedTouches[0].clientY - start.y;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > 2 * Math.abs(dy) && Date.now() - start.at < 700) changeDay(shiftDay(date, dx < 0 ? 1 : -1));
+  };
   const goalsTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const fail = (what: string) => (e: unknown) => {
@@ -184,15 +245,13 @@ function Tracker({ session }: { session: Session }) {
   ];
 
   return (
-    <main>
+    <main onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <header>
         <Title />
-        <div className="header-actions">
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value || today())} aria-label="Diary date" />
-          <button className="link" onClick={() => supabase!.auth.signOut()} title={session.user.email}>Sign out</button>
-        </div>
+        <DateBar date={date} onChange={changeDay} />
       </header>
       {notice && <p className="note notice" role="status">{notice} <button className="link" onClick={() => setNotice("")}>Dismiss</button></p>}
+      <div key={date} className={`day-content${slide ? ` from-${slide}` : ""}`}>
       {date === today() && <p className="greeting">{greeting(entries, total, goals, targetsOn)}</p>}
 
       <section className="totals">
@@ -265,6 +324,7 @@ function Tracker({ session }: { session: Session }) {
           );
         })}
       </section>
+      </div>
       <footer className="account">
         <p className="note">Signed in as {session.user.email}</p>
         {confirmDelete ? (
@@ -279,7 +339,10 @@ function Tracker({ session }: { session: Session }) {
             </div>
           </div>
         ) : (
-          <button className="link" onClick={() => setConfirmDelete(true)}>delete account</button>
+          <div className="account-links">
+            <button className="link" onClick={() => supabase!.auth.signOut()}>sign out</button>
+            <button className="link" onClick={() => setConfirmDelete(true)}>delete account</button>
+          </div>
         )}
       </footer>
       {addingTo && (
