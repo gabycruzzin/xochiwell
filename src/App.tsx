@@ -3,7 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import type { Macros } from "./api";
 import {
   supabase, DEFAULT_GOALS, NEW_PROFILE, type Entry, type NewEntry, type Profile,
-  loadDay, addEntry, removeEntry, countEntries, loadGoals, saveGoals, loadProfile, saveProfile,
+  loadDay, addEntry, addEntries, removeEntry, countEntries, loadGoals, saveGoals, loadProfile, saveProfile,
   loadCustomServings, saveCustomServing, importLocalData, deleteAccount,
 } from "./db";
 import AddSheet from "./AddSheet";
@@ -124,6 +124,16 @@ function Tracker({ session }: { session: Session }) {
         setEntryCount((n) => n + 1);
       })
       .catch(fail(`add ${entry.name}`));
+  };
+  // Copies an earlier meal's foods into the day being viewed, under the meal they're being added to.
+  const copyMeal = (list: NewEntry[], meal: string) => {
+    const day = date;
+    return addEntries(day, list.map((e) => ({ ...e, meal })))
+      .then((saved) => {
+        if (day === date) setEntries((current) => [...current, ...saved]);
+        setEntryCount((n) => n + saved.length);
+      })
+      .catch((e) => { fail("copy that meal")(e); throw e; });
   };
   const remove = (id: string) => {
     const before = entries;
@@ -273,8 +283,8 @@ function Tracker({ session }: { session: Session }) {
         )}
       </footer>
       {addingTo && (
-        <AddSheet meal={addingTo} customServings={customServings} onCustomServing={changeCustomServing}
-          onAdd={add} onClose={closeSheet} disabled={!ready} />
+        <AddSheet meal={addingTo} date={date} customServings={customServings} onCustomServing={changeCustomServing}
+          onAdd={add} onCopy={(list) => copyMeal(list, addingTo)} onClose={closeSheet} disabled={!ready} />
       )}
     </main>
   );

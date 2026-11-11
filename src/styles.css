@@ -126,3 +126,8 @@ button.danger { background:#8f3b30; border-color:#8f3b30; } button.danger:hover:
 /* Search row: the box shrinks so search and scan stay on one line on a phone. */
 form[role=search] > input:first-child { flex:1 1 0; min-width:0; }
 button.scan { color:var(--ink); }
+/* Recent meals to copy, at the top of the add sheet. */
+.past-meals { margin-bottom:18px; } .past-meals h3 { margin:0 0 4px; }
+.past-meal { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 2px; }
+.past-meal .result-name small { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.past-meal button { flex-shrink:0; min-height:36px; padding:6px 14px; font-size:.85rem; color:var(--ink); }

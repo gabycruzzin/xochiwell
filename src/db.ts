@@ -31,6 +31,31 @@ export async function addEntry(day: string, entry: NewEntry): Promise<Entry> {
   return data;
 }
 
+export async function addEntries(day: string, entries: NewEntry[]): Promise<Entry[]> {
+  const { data, error } = await db().from("diary_entries").insert(entries.map((e) => ({ ...e, day }))).select(ENTRY_COLUMNS);
+  if (error) throw error;
+  return data;
+}
+
+// One meal as it was logged on an earlier day, for copying into another day.
+export type PastMeal = { day: string; entries: NewEntry[] };
+
+// The most recent earlier days that have this meal logged, newest first (at most `limit` days).
+export async function loadPastMeals(meal: string, beforeDay: string, limit = 5): Promise<PastMeal[]> {
+  const { data, error } = await db().from("diary_entries")
+    .select(`day, ${ENTRY_COLUMNS}`)
+    .eq("meal", meal).lt("day", beforeDay)
+    .order("day", { ascending: false }).order("created_at")
+    .limit(80); // a few days' worth of entries; grouped into days below
+  if (error) throw error;
+  const byDay = new Map<string, NewEntry[]>();
+  for (const { day, id: _id, ...entry } of data) {
+    if (!byDay.has(day) && byDay.size === limit) break;
+    byDay.set(day, [...(byDay.get(day) ?? []), entry]);
+  }
+  return [...byDay].map(([day, entries]) => ({ day, entries }));
+}
+
 export async function removeEntry(id: string) {
   const { error } = await db().from("diary_entries").delete().eq("id", id);
   if (error) throw error;
