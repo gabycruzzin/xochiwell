@@ -70,6 +70,8 @@ button.link:hover:not(:disabled) { background:none; color:var(--ink); }
 .auth { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:24px; margin-top:24px; max-width:420px; }
 .auth h2 { margin:0 0 4px; }
 .auth form { display:grid; gap:12px; margin:16px 0 8px; } .auth label { display:grid; gap:4px; font-size:.85rem; color:var(--mute); text-transform:lowercase; }
+.password-field { position:relative; display:block; } .password-field input { width:100%; padding-right:64px; }
+.password-field .show-password { position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:.82rem; padding:6px; text-transform:lowercase; }
 code { font-size:.9em; background:var(--track); padding:1px 5px; border-radius:4px; }
 .greeting { margin:20px 0 0; color:var(--mute); }
 .goal-links { display:flex; flex-wrap:wrap; gap:4px 16px; margin-top:12px; } .goal-links .link { font-size:.85rem; text-transform:lowercase; }

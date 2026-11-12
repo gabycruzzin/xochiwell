@@ -13,6 +13,7 @@ export default function SignIn({ notice = "" }: { notice?: string }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [unconfirmed, setUnconfirmed] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -56,14 +57,23 @@ export default function SignIn({ notice = "" }: { notice?: string }) {
           <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </label>
         <label>Password
-          <input type="password" autoComplete={mode === "in" ? "current-password" : "new-password"} required minLength={6}
-            value={password} onChange={(e) => setPassword(e.target.value)} />
+          {/* Show lets you check what you typed, especially when creating a password. */}
+          <span className="password-field">
+            <input type={showPassword ? "text" : "password"} autoComplete={mode === "in" ? "current-password" : "new-password"} required minLength={6}
+              autoCapitalize="none" autoCorrect="off" spellCheck={false}
+              value={password} onChange={(e) => setPassword(e.target.value)} />
+            <button type="button" className="link show-password" onClick={() => setShowPassword((v) => !v)}
+              onMouseDown={(e) => e.preventDefault()} /* keep typing focus (and the phone keyboard) in the password box */
+              aria-pressed={showPassword} aria-label={showPassword ? "Hide password" : "Show password"}>
+              {showPassword ? "hide" : "show"}
+            </button>
+          </span>
         </label>
         <button type="submit" disabled={busy}>{busy ? "One moment…" : mode === "in" ? "Sign in" : "Create account"}</button>
       </form>
       {(message || notice) && <p className="note" role="status">{message || notice}</p>}
       {unconfirmed && <button type="button" className="link" disabled={busy} onClick={resend}>Resend the verification email</button>}
-      <button type="button" className="link" onClick={() => { setMode(mode === "in" ? "up" : "in"); setMessage(""); setUnconfirmed(false); setEmail(""); setPassword(""); }}>
+      <button type="button" className="link" onClick={() => { setMode(mode === "in" ? "up" : "in"); setMessage(""); setUnconfirmed(false); setEmail(""); setPassword(""); setShowPassword(false); }}>
         {mode === "in" ? "New here? Create an account" : "Already have an account? Sign in"}
       </button>
     </section>
