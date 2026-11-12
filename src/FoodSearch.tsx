@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type InputHTMLAttributes } from "react";
 import { Capacitor } from "@capacitor/core";
 import { lookupBarcode, matchesQuery, PER_OZ, searchFoods, type Food, type Macros, type Serving } from "./api";
 import { loadRecentFoods, recentFromEntry, type NewEntry } from "./db";
@@ -205,9 +205,9 @@ export default function FoodSearch({
                   ) : (
                     <small className="serving">
                       1 serving ={" "}
-                      <input className="inline" type="number" min={1} value={s.amount} aria-label={`Serving size in grams for ${f.name}`}
-                        onChange={(e) => onCustomServing(f.id, Math.max(1, Number(e.target.value) || 1), false)}
-                        onBlur={() => onCustomServing(f.id, s.amount, true)} />{" "}
+                      <NumberField className="inline" min={1} value={s.amount} aria-label={`Serving size in grams for ${f.name}`}
+                        onValue={(n) => onCustomServing(f.id, Math.round(n), false)}
+                        onDone={(n) => onCustomServing(f.id, Math.round(n), true)} />{" "}
                       g <span className="hint">(none listed, set your own)</span>
                     </small>
                   )}
@@ -215,9 +215,9 @@ export default function FoodSearch({
                   <div className="controls amount">
                     <div className="stepper">
                       <button type="button" className="ghost" onClick={() => setQty(Math.max(step, Math.ceil(qty / step - 1) * step))} disabled={qty <= step} aria-label="Less">−</button>
-                      <input type="number" inputMode="decimal" min={mode === "oz" ? 0.1 : mode === "base" ? 1 : SERVING_STEP} step="any" value={qty}
-                        onChange={(e) => setQty(Number(e.target.value) || 0)}
-                        onBlur={() => setQty(mode === "serving" ? roundToStep(qty) : fromBase(toBase(qty, mode, s), mode, s))} aria-label={`Amount in ${unitLabel(mode, s, 2)}`} />
+                      <NumberField inputMode="decimal" min={mode === "oz" ? 0.1 : mode === "base" ? 1 : SERVING_STEP} step="any" value={qty}
+                        onValue={setQty}
+                        onDone={(n) => setQty(mode === "serving" ? roundToStep(n) : fromBase(toBase(n, mode, s), mode, s))} aria-label={`Amount in ${unitLabel(mode, s, 2)}`} />
                       <button type="button" className="ghost" onClick={() => setQty(Math.floor(qty / step + 1) * step)} aria-label="More">+</button>
                     </div>
                     {PER_OZ[s.unit] ? (
@@ -243,5 +243,30 @@ export default function FoodSearch({
         })}
       </ul>
     </>
+  );
+}
+
+// A number box you can clear and retype freely. While you're typing, only real positive numbers are passed on
+// (so an empty box doesn't snap back to 1). Leaving it empty puts back the number it had before you started.
+function NumberField({ value, onValue, onDone, ...rest }: {
+  value: number; onValue: (n: number) => void; onDone?: (final: number) => void;
+} & Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type">) {
+  const [text, setText] = useState<string | null>(null); // null when not being edited
+  const before = useRef(value);
+  return (
+    <input {...rest} type="number" value={text ?? String(value)}
+      onFocus={(e) => { before.current = value; setText(String(value)); rest.onFocus?.(e); }}
+      onChange={(e) => {
+        setText(e.target.value);
+        const n = Number(e.target.value);
+        if (e.target.value.trim() !== "" && n > 0) onValue(n);
+      }}
+      onBlur={(e) => {
+        const final = Number(text) > 0 ? Number(text) : before.current;
+        if (final !== Number(text)) onValue(final);
+        setText(null);
+        onDone?.(final);
+        rest.onBlur?.(e);
+      }} />
   );
 }
