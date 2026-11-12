@@ -3,13 +3,19 @@ import { Capacitor } from "@capacitor/core";
 export type Macros = { kcal: number; protein: number; carbs: number; fat: number };
 // serving: one serving as the label prints it (e.g. "1 container (150 g)"), plus its weight or volume.
 export type Serving = { amount: number; unit: string; label: string };
-export type Food = { id: string; name: string; brand?: string; per100g: Macros; serving?: Serving };
+// recent: a food rebuilt from your own diary rather than from the food database.
+export type Food = { id: string; name: string; brand?: string; per100g: Macros; serving?: Serving; recent?: boolean };
+
+// Ounces per food unit: weight ounces for foods measured in grams, fluid ounces for drinks in ml.
+export const PER_OZ: Record<string, number> = { g: 28.3495, ml: 29.5735 };
 
 type OFFProduct = {
   code?: string;
   product_name?: string;
   brands?: string | string[];
   nutriments?: Record<string, number | string | undefined>;
+  countries_tags?: string[];
+  completeness?: number; // 0–1, how much of the product page has been filled in
 };
 
 type OFFServing = { code: string; serving_size?: string; serving_quantity?: number | string; serving_quantity_unit?: string };
@@ -68,17 +74,76 @@ export async function lookupBarcode(code: string, signal?: AbortSignal): Promise
   return { missing: named ? "nutrition" : "product" };
 }
 
-// Open Food Facts search API (free, no key).
+// Open Food Facts is crowd-sourced, so the same food can appear many times with very different numbers (turkey
+// bacon ranges from 30 to 233 kcal per 100 g). Results are re-ranked so the likely-right ones come first.
+const words = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").match(/[a-z0-9]+/g) ?? [];
+const sameWord = (a: string, b: string) => a === b || a === `${b}s` || b === `${a}s` || a === `${b}es` || b === `${a}es`;
+export const matchesQuery = (name: string, query: string) => {
+  const n = words(name);
+  return words(query).every((w) => n.some((x) => sameWord(x, w) || x.startsWith(w)));
+};
+
+// Your country, from the phone's region setting, to favor products sold where you shop.
+const COUNTRIES: Record<string, string> = {
+  US: "united-states", CA: "canada", MX: "mexico", GB: "united-kingdom", IE: "ireland", AU: "australia", NZ: "new-zealand",
+  FR: "france", DE: "germany", ES: "spain", IT: "italy", NL: "netherlands", BE: "belgium", CH: "switzerland",
+};
+const myCountry = `en:${COUNTRIES[(navigator.language.split("-")[1] ?? "US").toUpperCase()] ?? "united-states"}`;
+
+function score(p: OFFProduct, f: Food, query: string): number {
+  const q = words(query), name = words(f.name);
+  const { kcal, protein, carbs, fat } = f.per100g;
+  let s = 0;
+  // Name: all the words you typed, and not much else ("turkey bacon" over "turkey bacon cheddar wrap").
+  s += (3 * q.filter((w) => name.some((x) => sameWord(x, w) || x.startsWith(w))).length) / Math.max(1, q.length);
+  s -= Math.min(2, 0.4 * Math.max(0, name.length - q.length));
+  if (name.length === q.length && q.every((w) => name.some((x) => sameWord(x, w)))) s += 2; // exactly what you typed
+  if (p.countries_tags?.includes(myCountry)) s += 1.5;
+  if (f.brand) s += 1;
+  s += 1.5 * (p.completeness ?? 0);
+  // Protein and carbs are ~4 kcal/g and fat ~9, so the macros should roughly add up to the calories.
+  // When they don't, the entry was probably typed in wrong (often per-serving numbers entered as per 100 g).
+  const est = 4 * protein + 4 * carbs + 9 * fat;
+  const off = Math.abs(est - kcal) / Math.max(kcal, est, 1);
+  if (Math.max(kcal, est) >= 20) s -= off > 0.35 ? 4 : off > 0.2 ? 1.5 : 0;
+  if (kcal === 0 && protein + carbs + fat === 0) s -= 1; // nothing filled in at all
+  return s;
+}
+
+export function rankFoods(hits: OFFProduct[], query: string, limit = 20): Food[] {
+  const scored: { f: Food; s: number }[] = [];
+  for (const p of hits) {
+    const f = toFood(p);
+    if (!f) continue;
+    const { kcal, protein, carbs, fat } = f.per100g;
+    if (kcal > 900 || protein + carbs + fat > 102) continue; // impossible per 100 g
+    scored.push({ f, s: score(p, f, query) });
+  }
+  scored.sort((a, b) => b.s - a.s);
+  // The same product is often entered several times; keep the best-scored copy.
+  const seen = new Set<string>();
+  const out: Food[] = [];
+  for (const { f } of scored) {
+    const key = `${words(f.name).join(" ")}|${(f.brand ?? "").toLowerCase()}|${Math.round(f.per100g.kcal / 10)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(f);
+    if (out.length === limit) break;
+  }
+  return out;
+}
+
+// Open Food Facts search API (free, no key). Fetches extra results so there's room to re-rank.
 export async function searchFoods(query: string, signal?: AbortSignal): Promise<Food[]> {
   const params = new URLSearchParams({
     q: query,
-    page_size: "20",
-    fields: "code,product_name,brands,nutriments",
+    page_size: "50",
+    fields: "code,product_name,brands,nutriments,countries_tags,completeness",
   });
   const res = await fetch(`${SEARCH_URL}?${params}`, { signal, headers: HEADERS });
   if (!res.ok) throw new Error(`Food search failed (${res.status})`);
   const data = (await res.json()) as { hits?: OFFProduct[] };
-  const foods = (data.hits ?? []).map(toFood).filter((f): f is Food => f !== null);
+  const foods = rankFoods(data.hits ?? [], query);
   const servings = await fetchServings(foods.map((f) => f.id), signal);
   return foods.map((f) => ({ ...f, serving: servings.get(f.id) }));
 }

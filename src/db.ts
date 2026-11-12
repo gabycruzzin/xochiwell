@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import type { Macros } from "./api";
+import { PER_OZ, type Food, type Macros } from "./api";
 
 // Set these in .env.local (see .env.example). The anon key is meant to be public; row level security
 // in supabase/schema.sql is what keeps each user's data private.
@@ -62,6 +62,41 @@ export async function loadPastMeals(meal: string, beforeDay: string, limit = 5):
     byDay.set(day, [...(byDay.get(day) ?? []), entry]);
   }
   return [...byDay].map(([day, entries]) => ({ day, entries }));
+}
+
+// A food rebuilt from a diary entry, so things you've logged before can be found and added again.
+// Entries store the amount logged and its totals, so the per-100 g numbers are worked back from those.
+export function recentFromEntry(e: Pick<Entry, "name" | "grams" | "unit" | "servings"> & Macros): Food | null {
+  const base = e.unit === "oz" ? "g" : e.unit === "fl oz" ? "ml" : e.unit;
+  const amount = Number(e.grams) * (base === e.unit ? 1 : PER_OZ[base]);
+  if (!(amount > 0) || !PER_OZ[base]) return null;
+  const per = (v: number) => Math.round((Number(v) * 1000) / amount) / 10;
+  const serving = Math.round(e.servings ? amount / Number(e.servings) : amount);
+  return {
+    id: `recent:${e.name.trim().toLowerCase()}`,
+    name: e.name,
+    recent: true,
+    per100g: { kcal: Math.round((Number(e.kcal) * 100) / amount), protein: per(e.protein), carbs: per(e.carbs), fat: per(e.fat) },
+    // One serving is the serving you logged, or the whole amount if you logged it by weight.
+    serving: { amount: serving, unit: base, label: e.servings || base === e.unit ? `${serving} ${base}` : `${e.grams} ${e.unit} (${serving} ${base})` },
+  };
+}
+
+// Foods from your recent diary entries (one per name), the ones you log most often first.
+export async function loadRecentFoods(): Promise<Food[]> {
+  const { data, error } = await db().from("diary_entries")
+    .select("name, grams, unit, servings, kcal, protein, carbs, fat")
+    .order("created_at", { ascending: false }).limit(300);
+  if (error) throw error;
+  const byName = new Map<string, { food: Food; count: number }>();
+  for (const e of data) {
+    const key = e.name.trim().toLowerCase();
+    const seen = byName.get(key);
+    if (seen) { seen.count++; continue; }
+    const food = recentFromEntry(e);
+    if (food) byName.set(key, { food, count: 1 });
+  }
+  return [...byName.values()].sort((a, b) => b.count - a.count).map((x) => x.food); // stable: ties stay newest first
 }
 
 export async function removeEntry(id: string) {

@@ -1,7 +1,7 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Capacitor } from "@capacitor/core";
-import { lookupBarcode, searchFoods, type Food, type Macros, type Serving } from "./api";
-import type { NewEntry } from "./db";
+import { lookupBarcode, matchesQuery, PER_OZ, searchFoods, type Food, type Macros, type Serving } from "./api";
+import { loadRecentFoods, recentFromEntry, type NewEntry } from "./db";
 
 // The barcode scanner uses the phone's camera, so it's offered in the iOS app only.
 const canScan = Capacitor.isNativePlatform();
@@ -11,7 +11,6 @@ const SERVING_STEP = 0.5;
 const roundToStep = (n: number) => Math.max(SERVING_STEP, Math.round(n / SERVING_STEP) * SERVING_STEP);
 // How you enter an amount: in servings, in the food's own unit (g or ml), or in ounces (fl oz for drinks).
 type Mode = "serving" | "base" | "oz";
-const PER_OZ: Record<string, number> = { g: 28.3495, ml: 29.5735 };
 const STEP: Record<Mode, number> = { serving: SERVING_STEP, base: 10, oz: 0.5 };
 const MODE_KEY = "xochiwell-amount-unit";
 const loadMode = (): Mode => {
@@ -68,6 +67,10 @@ export default function FoodSearch({
   const [selected, setSelected] = useState<string | null>(null);
   const [qty, setQty] = useState(1);
   const [prefMode, setPrefMode] = useState<Mode>(loadMode);
+  const [recents, setRecents] = useState<Food[]>([]);
+  useEffect(() => { loadRecentFoods().then(setRecents).catch(() => {}); }, []);
+  // Foods you've logged before whose names match what you've typed so far.
+  const recentMatches = query.trim() ? recents.filter((f) => matchesQuery(f.name, query)) : recents;
   const [pickedMeal, setPickedMeal] = useState(MEALS[0]);
   const searchCtrl = useRef<AbortController>();
   const meal = fixedMeal ?? pickedMeal;
@@ -84,7 +87,8 @@ export default function FoodSearch({
     try {
       const foods = await searchFoods(q, ctrl.signal);
       if (ctrl.signal.aborted) return; // a newer search started (the app's native networking ignores aborts)
-      setResults(foods);
+      const mine = recents.filter((f) => matchesQuery(f.name, q)).slice(0, 3); // yours first: you know they're right
+      setResults([...mine, ...foods]);
       setStatus(foods.length ? "" : "No foods found. Try a simpler name.");
     } catch (e) {
       if ((e as Error).name !== "AbortError") setStatus("Search failed. Check your connection and try again.");
@@ -162,7 +166,10 @@ export default function FoodSearch({
     const logged = mode === "serving" ? { grams: Math.round(base), unit: s.unit, servings: qty }
       : mode === "base" ? { grams: Math.round(qty), unit: s.unit, servings: null }
       : { grams: round1(qty), unit: unitLabel("oz", s, qty), servings: null };
-    onAdd({ name: f.name, ...logged, meal, ...scale(f.per100g, base) });
+    const entry = { name: f.name, ...logged, meal, ...scale(f.per100g, base) };
+    onAdd(entry);
+    const recent = recentFromEntry(entry);
+    if (recent) setRecents((r) => [recent, ...r.filter((x) => x.id !== recent.id)]);
     setSelected(null);
     setStatus(`Added ${f.name} to ${meal.toLowerCase()}.`);
   };
@@ -176,8 +183,9 @@ export default function FoodSearch({
         {canScan && <button type="button" className="ghost scan" onClick={scan} aria-label="Scan a barcode">Scan</button>}
       </form>
       {status && <p className="note" role="status">{status}</p>}
+      {!results.length && recentMatches.length > 0 && <h3 className="recent-head">your recent foods</h3>}
       <ul className="results">
-        {results.map((f) => {
+        {(results.length ? results : recentMatches.slice(0, 8)).map((f) => {
           const s = servingOf(f, customServings);
           const per = scale(f.per100g, s.amount);
           const isOpen = selected === f.id;
@@ -187,7 +195,7 @@ export default function FoodSearch({
           return (
             <li key={f.id} className={isOpen ? "open" : ""}>
               <button type="button" className="result" onClick={() => toggle(f)} aria-expanded={isOpen}>
-                <span className="result-name"><b>{f.name}</b>{f.brand && <small>{f.brand}</small>}</span>
+                <span className="result-name"><b>{f.name}</b>{f.recent ? <small className="recent-tag">you've logged this</small> : f.brand && <small>{f.brand}</small>}</span>
                 <span className="result-kcal">{per.kcal} kcal</span>
               </button>
               {isOpen && (

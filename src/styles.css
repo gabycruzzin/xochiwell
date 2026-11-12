@@ -223,3 +223,6 @@ button.open-weight { display:block; width:100%; margin:0 0 10px; }
 .trend-chart .dot-hit { cursor:pointer; }
 .chart-caption { margin:6px 2px 0; font-size:.82rem; }
 .weight-history h3 { margin:0 0 4px; }
+/* Foods you've logged before, shown before searching and at the top of results. */
+.recent-head { margin:16px 0 0; }
+.result-name small.recent-tag { color:#8f7861; }
