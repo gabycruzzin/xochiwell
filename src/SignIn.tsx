@@ -1,7 +1,12 @@
 import { useState, type FormEvent } from "react";
+import { Capacitor } from "@capacitor/core";
 import { supabase } from "./db";
 
-export default function SignIn() {
+// Where the "confirm your email" link lands: the iOS app itself, or this site in a browser. Both must be listed
+// under Supabase → Authentication → URL Configuration → Redirect URLs.
+export const CONFIRM_REDIRECT = Capacitor.isNativePlatform() ? "xochiwell://auth" : window.location.origin;
+
+export default function SignIn({ notice = "" }: { notice?: string }) {
   const [mode, setMode] = useState<"in" | "up">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,8 +21,7 @@ export default function SignIn() {
     const { data, error } =
       mode === "in"
         ? await supabase.auth.signInWithPassword({ email, password })
-        // The confirmation link returns here; this address must be in Supabase's Auth → URL Configuration.
-        : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
+        : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: CONFIRM_REDIRECT } });
     setBusy(false);
     if (error) return setMessage(error.message);
     // With email confirmation on (Supabase's default), sign-up returns no session until the link is clicked.
@@ -38,7 +42,7 @@ export default function SignIn() {
         </label>
         <button type="submit" disabled={busy}>{busy ? "One moment…" : mode === "in" ? "Sign in" : "Create account"}</button>
       </form>
-      {message && <p className="note">{message}</p>}
+      {(message || notice) && <p className="note">{message || notice}</p>}
       <button type="button" className="link" onClick={() => { setMode(mode === "in" ? "up" : "in"); setMessage(""); }}>
         {mode === "in" ? "New here? Create an account" : "Already have an account? Sign in"}
       </button>

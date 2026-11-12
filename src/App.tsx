@@ -4,7 +4,7 @@ import type { Macros } from "./api";
 import {
   supabase, DEFAULT_GOALS, NEW_PROFILE, type Entry, type NewEntry, type Profile,
   loadDay, addEntry, addEntries, removeEntry, countEntries, loadGoals, saveGoals, loadProfile, saveProfile,
-  loadCustomServings, saveCustomServing, importLocalData, deleteAccount, deleteAllWeights,
+  loadCustomServings, saveCustomServing, importLocalData, deleteAccount, deleteAllWeights, signInFromLink,
 } from "./db";
 import AddSheet from "./AddSheet";
 import MacroChart from "./MacroChart";
@@ -15,6 +15,8 @@ import { canNotify, onWeeklyReminderTap, setWeeklyReminder, weeklyReminderOn } f
 import { MEALS, MacroText, servingLabel, sumMacros } from "./FoodSearch";
 import Setup, { type SetupStep } from "./Setup";
 import SignIn from "./SignIn";
+import { App as NativeApp } from "@capacitor/app";
+import { Capacitor } from "@capacitor/core";
 
 const today = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
 // Dates are handled at local noon so adding days never trips over daylight-saving changes.
@@ -76,12 +78,22 @@ function greeting(entries: Entry[], total: Macros, goals: Macros, targetsOn: boo
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [checked, setChecked] = useState(false);
+  const [linkNote, setLinkNote] = useState("");
 
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setChecked(true); });
     const { data } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => data.subscription.unsubscribe();
+  }, []);
+
+  // Tapping "confirm your email" on the phone opens the app at xochiwell://auth, already signed in.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const listener = NativeApp.addListener("appUrlOpen", ({ url }) => {
+      if (url.startsWith("xochiwell://auth")) signInFromLink(url).catch((e: Error) => setLinkNote(e.message));
+    });
+    return () => { listener.then((l) => l.remove()); };
   }, []);
 
   if (!supabase) {
@@ -99,7 +111,7 @@ export default function App() {
     );
   }
   if (!checked) return <main><header><Title /></header><p className="note">Loading…</p></main>;
-  if (!session) return <main><header><Title /></header><SignIn /></main>;
+  if (!session) return <main><header><Title /></header><SignIn notice={linkNote} /></main>;
   return <Tracker session={session} />;
 }
 

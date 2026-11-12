@@ -64,6 +64,21 @@ export async function loadPastMeals(meal: string, beforeDay: string, limit = 5):
   return [...byDay].map(([day, entries]) => ({ day, entries }));
 }
 
+// Signs in from an email link that opened the app (xochiwell://auth…). Supabase puts either a one-time code in the
+// query (PKCE) or the session tokens in the #fragment, or an error if the link expired or was already used.
+export async function signInFromLink(url: string) {
+  const [beforeHash, hash = ""] = url.split("#");
+  const query = new URLSearchParams(beforeHash.split("?")[1] ?? ""), frag = new URLSearchParams(hash);
+  const code = query.get("code");
+  const access_token = frag.get("access_token"), refresh_token = frag.get("refresh_token");
+  const failed = frag.get("error_description") ?? query.get("error_description");
+  if (failed) throw new Error(`${failed.replace(/\+/g, " ")}. Sign in below, or create your account again for a new link.`);
+  const { error } = code ? await db().auth.exchangeCodeForSession(code)
+    : access_token && refresh_token ? await db().auth.setSession({ access_token, refresh_token })
+    : { error: null };
+  if (error) throw error;
+}
+
 // A food rebuilt from a diary entry, so things you've logged before can be found and added again.
 // Entries store the amount logged and its totals, so the per-100 g numbers are worked back from those.
 export function recentFromEntry(e: Pick<Entry, "name" | "grams" | "unit" | "servings"> & Macros): Food | null {
