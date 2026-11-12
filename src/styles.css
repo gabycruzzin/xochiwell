@@ -43,7 +43,7 @@ button:hover:not(:disabled) { background:var(--accent-dark); border-color:var(--
 button.ghost { background:#fff; color:var(--mute); border-color:var(--line); }
 button.ghost:hover:not(:disabled) { background:var(--track); color:var(--ink); border-color:var(--line); }
 button:disabled { opacity:.35; cursor:default; }
-.stepper { display:flex; } .stepper input[type=number] { width:56px; text-align:center; border-radius:0; border-left:0; border-right:0; }
+.stepper { display:flex; } .stepper input[type=number] { width:72px; padding-left:4px; padding-right:4px; text-align:center; border-radius:0; border-left:0; border-right:0; }
 .stepper button:first-child { border-radius:10px 0 0 10px; } .stepper button:last-child { border-radius:0 10px 10px 0; } .stepper button { width:40px; padding:10px 0; color:var(--ink); }
 :focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
 .list { list-style:none; padding:0; margin:8px 0; }
@@ -117,6 +117,7 @@ button.result:hover:not(:disabled) { background:none; } .results li.open button.
 .result-detail { display:grid; gap:4px; padding:0 2px 14px; }
 .result-detail small { color:var(--mute); font-size:.82rem; } .result-detail small.serving { color:#8f7861; }
 .result-detail .controls.amount { margin-top:8px; } .result-detail .controls.amount select { margin-left:auto; }
+.controls.amount select.amount-unit { margin-left:0; padding-right:26px; }
 button.add { margin-top:8px; width:100%; }
 /* Slide-up add sheet. */
 .sheet-backdrop { position:fixed; inset:0; z-index:10; background:rgba(29,28,26,.28); display:flex; align-items:flex-end; justify-content:center; animation:fade .2s ease; }

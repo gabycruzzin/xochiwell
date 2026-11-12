@@ -9,6 +9,15 @@ const canScan = Capacitor.isNativePlatform();
 export const MEALS = ["Breakfast", "Lunch", "Dinner", "Snacks"];
 const SERVING_STEP = 0.5;
 const roundToStep = (n: number) => Math.max(SERVING_STEP, Math.round(n / SERVING_STEP) * SERVING_STEP);
+// How you enter an amount: in servings, in the food's own unit (g or ml), or in ounces (fl oz for drinks).
+type Mode = "serving" | "base" | "oz";
+const PER_OZ: Record<string, number> = { g: 28.3495, ml: 29.5735 };
+const STEP: Record<Mode, number> = { serving: SERVING_STEP, base: 10, oz: 0.5 };
+const MODE_KEY = "xochiwell-amount-unit";
+const loadMode = (): Mode => {
+  try { const m = localStorage.getItem(MODE_KEY); return m === "base" || m === "oz" ? m : "serving"; } catch { return "serving"; }
+};
+const round1 = (n: number) => Math.round(n * 10) / 10;
 export const servingLabel = (n: number) => `${n} serving${n === 1 ? "" : "s"}`;
 // Foods without a listed serving size use the size you set for them (remembered by food), or 100 g.
 const servingOf = (f: Food, custom: Record<string, number>): Serving => {
@@ -57,7 +66,8 @@ export default function FoodSearch({
   const [results, setResults] = useState<Food[]>([]);
   const [status, setStatus] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const [servings, setServings] = useState(1);
+  const [qty, setQty] = useState(1);
+  const [prefMode, setPrefMode] = useState<Mode>(loadMode);
   const [pickedMeal, setPickedMeal] = useState(MEALS[0]);
   const searchCtrl = useRef<AbortController>();
   const meal = fixedMeal ?? pickedMeal;
@@ -110,8 +120,7 @@ export default function FoodSearch({
       if (ctrl.signal.aborted) return;
       if ("food" in found) {
         setResults([found.food]);
-        setSelected(found.food.id);
-        setServings(1);
+        open(found.food);
         setStatus("");
       } else {
         setResults([]);
@@ -124,15 +133,36 @@ export default function FoodSearch({
     }
   };
 
-  const toggle = (id: string) => {
-    setSelected(selected === id ? null : id);
-    setServings(1);
+  // Ounces only make sense for foods measured in g or ml; anything else is entered in servings.
+  const modeFor = (s: Serving): Mode => (prefMode === "serving" || PER_OZ[s.unit] ? prefMode : "serving");
+  const unitLabel = (mode: Mode, s: Serving, n: number) =>
+    mode === "serving" ? (n === 1 ? "serving" : "servings") : mode === "base" ? s.unit : s.unit === "ml" ? "fl oz" : "oz";
+  // The amount in the food's own unit (g or ml), which is what nutrition is scaled by.
+  const toBase = (n: number, mode: Mode, s: Serving) => (mode === "serving" ? n * s.amount : mode === "base" ? n : n * PER_OZ[s.unit]);
+  const fromBase = (b: number, mode: Mode, s: Serving) =>
+    mode === "serving" ? Math.max(SERVING_STEP, Math.round(b / s.amount / SERVING_STEP) * SERVING_STEP) : mode === "base" ? Math.max(1, Math.round(b)) : Math.max(0.1, round1(b / PER_OZ[s.unit]));
+
+  const open = (f: Food) => {
+    const s = servingOf(f, customServings);
+    setSelected(f.id);
+    setQty(fromBase(s.amount, modeFor(s), s)); // starts at one serving, in whichever unit you last used
+  };
+  const toggle = (f: Food) => (selected === f.id ? setSelected(null) : open(f));
+  const switchMode = (next: Mode, s: Serving) => {
+    setQty(fromBase(toBase(qty, modeFor(s), s), next, s));
+    setPrefMode(next);
+    try { localStorage.setItem(MODE_KEY, next); } catch { /* remembered for this visit only */ }
   };
 
   const add = (f: Food) => {
-    const { amount, unit } = servingOf(f, customServings);
-    const grams = Math.round(servings * amount);
-    onAdd({ name: f.name, grams, unit, servings, meal, ...scale(f.per100g, grams) });
+    const s = servingOf(f, customServings);
+    const mode = modeFor(s);
+    const base = toBase(qty, mode, s);
+    // Servings keep the serving count; g/ml and oz entries are logged in the unit you typed, e.g. "3 oz".
+    const logged = mode === "serving" ? { grams: Math.round(base), unit: s.unit, servings: qty }
+      : mode === "base" ? { grams: Math.round(qty), unit: s.unit, servings: null }
+      : { grams: round1(qty), unit: unitLabel("oz", s, qty), servings: null };
+    onAdd({ name: f.name, ...logged, meal, ...scale(f.per100g, base) });
     setSelected(null);
     setStatus(`Added ${f.name} to ${meal.toLowerCase()}.`);
   };
@@ -150,14 +180,17 @@ export default function FoodSearch({
         {results.map((f) => {
           const s = servingOf(f, customServings);
           const per = scale(f.per100g, s.amount);
-          const open = selected === f.id;
+          const isOpen = selected === f.id;
+          const mode = modeFor(s);
+          const step = STEP[mode];
+          const base = toBase(qty, mode, s);
           return (
-            <li key={f.id} className={open ? "open" : ""}>
-              <button type="button" className="result" onClick={() => toggle(f.id)} aria-expanded={open}>
+            <li key={f.id} className={isOpen ? "open" : ""}>
+              <button type="button" className="result" onClick={() => toggle(f)} aria-expanded={isOpen}>
                 <span className="result-name"><b>{f.name}</b>{f.brand && <small>{f.brand}</small>}</span>
                 <span className="result-kcal">{per.kcal} kcal</span>
               </button>
-              {open && (
+              {isOpen && (
                 <div className="result-detail">
                   {f.serving ? (
                     <small className="serving">1 serving = {s.label}</small>
@@ -173,19 +206,27 @@ export default function FoodSearch({
                   <small><MacroText m={per} kcalLabel="kcal per serving" /></small>
                   <div className="controls amount">
                     <div className="stepper">
-                      <button type="button" className="ghost" onClick={() => setServings(roundToStep(servings - SERVING_STEP))} disabled={servings <= SERVING_STEP} aria-label="Fewer servings">−</button>
-                      <input type="number" min={SERVING_STEP} step={SERVING_STEP} value={servings} onChange={(e) => setServings(Number(e.target.value) || SERVING_STEP)} onBlur={() => setServings(roundToStep(servings))} aria-label="Servings" />
-                      <button type="button" className="ghost" onClick={() => setServings(roundToStep(servings + SERVING_STEP))} aria-label="More servings">+</button>
+                      <button type="button" className="ghost" onClick={() => setQty(Math.max(step, Math.ceil(qty / step - 1) * step))} disabled={qty <= step} aria-label="Less">−</button>
+                      <input type="number" inputMode="decimal" min={mode === "oz" ? 0.1 : mode === "base" ? 1 : SERVING_STEP} step="any" value={qty}
+                        onChange={(e) => setQty(Number(e.target.value) || 0)}
+                        onBlur={() => setQty(mode === "serving" ? roundToStep(qty) : fromBase(toBase(qty, mode, s), mode, s))} aria-label={`Amount in ${unitLabel(mode, s, 2)}`} />
+                      <button type="button" className="ghost" onClick={() => setQty(Math.floor(qty / step + 1) * step)} aria-label="More">+</button>
                     </div>
-                    <span>{servings === 1 ? "serving" : "servings"}</span>
+                    {PER_OZ[s.unit] ? (
+                      <select className="amount-unit" value={mode} onChange={(e) => switchMode(e.target.value as Mode, s)} aria-label="Unit">
+                        <option value="serving">{unitLabel("serving", s, qty)}</option>
+                        <option value="base">{s.unit}</option>
+                        <option value="oz">{unitLabel("oz", s, qty)}</option>
+                      </select>
+                    ) : <span>{unitLabel("serving", s, qty)}</span>}
                     {!fixedMeal && (
                       <select value={pickedMeal} onChange={(e) => setPickedMeal(e.target.value)} aria-label="Meal">
                         {MEALS.map((m) => <option key={m}>{m}</option>)}
                       </select>
                     )}
                   </div>
-                  <button className="add" onClick={() => add(f)} disabled={disabled}>
-                    Add {servings} ({Math.round(servings * s.amount)} {s.unit}) · {Math.round((per.kcal * servings))} kcal
+                  <button className="add" onClick={() => add(f)} disabled={disabled || !(qty > 0)}>
+                    Add {mode === "serving" ? `${qty} (${Math.round(base)} ${s.unit})` : `${round1(qty)} ${unitLabel(mode, s, qty)}`} · {scale(f.per100g, base).kcal} kcal
                   </button>
                 </div>
               )}
