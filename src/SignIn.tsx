@@ -43,7 +43,7 @@ export default function SignIn({ notice = "" }: { notice?: string }) {
         <button type="submit" disabled={busy}>{busy ? "One moment…" : mode === "in" ? "Sign in" : "Create account"}</button>
       </form>
       {(message || notice) && <p className="note">{message || notice}</p>}
-      <button type="button" className="link" onClick={() => { setMode(mode === "in" ? "up" : "in"); setMessage(""); }}>
+      <button type="button" className="link" onClick={() => { setMode(mode === "in" ? "up" : "in"); setMessage(""); setEmail(""); setPassword(""); }}>
         {mode === "in" ? "New here? Create an account" : "Already have an account? Sign in"}
       </button>
     </section>
