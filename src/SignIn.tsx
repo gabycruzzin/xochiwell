@@ -12,20 +12,39 @@ export default function SignIn({ notice = "" }: { notice?: string }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [unconfirmed, setUnconfirmed] = useState(false);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!supabase) return;
     setBusy(true);
     setMessage("");
+    setUnconfirmed(false);
     const { data, error } =
       mode === "in"
         ? await supabase.auth.signInWithPassword({ email, password })
         : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: CONFIRM_REDIRECT } });
     setBusy(false);
-    if (error) return setMessage(error.message);
+    if (error) {
+      // Supabase won't sign in an account whose email hasn't been confirmed yet.
+      if (error.code === "email_not_confirmed" || /not confirmed/i.test(error.message)) {
+        setUnconfirmed(true);
+        return setMessage("You haven't verified your email yet. Tap the link in the email we sent you, then sign in.");
+      }
+      if (error.code === "invalid_credentials") return setMessage("That email and password don't match. Try again?");
+      return setMessage(error.message);
+    }
     // With email confirmation on (Supabase's default), sign-up returns no session until the link is clicked.
     if (mode === "up" && !data.session) setMessage("Check your email for a link to confirm your account, then sign in.");
+  };
+
+  const resend = async () => {
+    if (!supabase) return;
+    setBusy(true);
+    const { error } = await supabase.auth.resend({ type: "signup", email, options: { emailRedirectTo: CONFIRM_REDIRECT } });
+    setBusy(false);
+    setMessage(error ? error.message : `Sent a new link to ${email}. Check your inbox (and spam).`);
+    if (!error) setUnconfirmed(false);
   };
 
   return (
@@ -42,8 +61,9 @@ export default function SignIn({ notice = "" }: { notice?: string }) {
         </label>
         <button type="submit" disabled={busy}>{busy ? "One moment…" : mode === "in" ? "Sign in" : "Create account"}</button>
       </form>
-      {(message || notice) && <p className="note">{message || notice}</p>}
-      <button type="button" className="link" onClick={() => { setMode(mode === "in" ? "up" : "in"); setMessage(""); setEmail(""); setPassword(""); }}>
+      {(message || notice) && <p className="note" role="status">{message || notice}</p>}
+      {unconfirmed && <button type="button" className="link" disabled={busy} onClick={resend}>Resend the verification email</button>}
+      <button type="button" className="link" onClick={() => { setMode(mode === "in" ? "up" : "in"); setMessage(""); setUnconfirmed(false); setEmail(""); setPassword(""); }}>
         {mode === "in" ? "New here? Create an account" : "Already have an account? Sign in"}
       </button>
     </section>
