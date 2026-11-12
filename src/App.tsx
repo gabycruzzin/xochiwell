@@ -15,6 +15,7 @@ import { canNotify, onWeeklyReminderTap, setWeeklyReminder, weeklyReminderOn } f
 import { MEALS, MacroText, servingLabel, sumMacros } from "./FoodSearch";
 import Setup, { type SetupStep } from "./Setup";
 import SignIn from "./SignIn";
+import PasswordSheet from "./PasswordSheet";
 import { App as NativeApp } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
 
@@ -79,19 +80,25 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [checked, setChecked] = useState(false);
   const [linkNote, setLinkNote] = useState("");
+  const [recovering, setRecovering] = useState(false); // opened from a reset-password link: ask for the new password
+  const endRecovery = useCallback(() => setRecovering(false), []);
 
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setChecked(true); });
-    const { data } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    const { data } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s);
+      if (event === "PASSWORD_RECOVERY") setRecovering(true); // a reset link opened in a browser
+    });
     return () => data.subscription.unsubscribe();
   }, []);
 
-  // Tapping "confirm your email" on the phone opens the app at xochiwell://auth, already signed in.
+  // Tapping "confirm your email" or "reset password" on the phone opens the app at xochiwell://auth, already signed in.
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     const listener = NativeApp.addListener("appUrlOpen", ({ url }) => {
-      if (url.startsWith("xochiwell://auth")) signInFromLink(url).catch((e: Error) => setLinkNote(e.message));
+      if (!url.startsWith("xochiwell://auth")) return;
+      signInFromLink(url).then((kind) => kind === "recovery" && setRecovering(true)).catch((e: Error) => setLinkNote(e.message));
     });
     return () => { listener.then((l) => l.remove()); };
   }, []);
@@ -112,7 +119,12 @@ export default function App() {
   }
   if (!checked) return <main><header><Title /></header><p className="note">Loading…</p></main>;
   if (!session) return <main><header><Title /></header><SignIn notice={linkNote} /></main>;
-  return <Tracker session={session} />;
+  return (
+    <>
+      <Tracker session={session} />
+      {recovering && <PasswordSheet reason="reset" onClose={endRecovery} />}
+    </>
+  );
 }
 
 function Tracker({ session }: { session: Session }) {
@@ -128,6 +140,8 @@ function Tracker({ session }: { session: Session }) {
   const [addingTo, setAddingTo] = useState<string | null>(null); // meal whose add sheet is open
   const [showSettings, setShowSettings] = useState(false);
   const closeSettings = useCallback(() => setShowSettings(false), []);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const closePassword = useCallback(() => setChangingPassword(false), []);
   const [showWeight, setShowWeight] = useState(false);
   const closeWeight = useCallback(() => setShowWeight(false), []);
   const [showReport, setShowReport] = useState(false);
@@ -366,10 +380,12 @@ function Tracker({ session }: { session: Session }) {
           onOpenReport={() => { setShowSettings(false); openReport(); }}
           onOpenWeight={() => { setShowSettings(false); setShowWeight(true); }}
           onDeleteWeights={() => deleteAllWeights().catch((e) => { fail("delete your weight history")(e); throw e; })}
+          onChangePassword={() => { setShowSettings(false); setChangingPassword(true); }}
           onSignOut={() => supabase!.auth.signOut()}
           onDeleteAccount={() => deleteAccount().catch((e) => { fail("delete your account")(e); throw e; })}
           onClose={closeSettings} />
       )}
+      {changingPassword && <PasswordSheet reason="change" onClose={closePassword} />}
       {showWeight && <WeightLog unit={profile.weightUnit} today={today()} onClose={closeWeight} onError={fail} />}
       {showReport && <WeeklyReport today={today()} goals={goals} targetsOn={targetsOn} onClose={closeReport} />}
       {addingTo && (

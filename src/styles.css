@@ -228,3 +228,7 @@ button.open-weight { display:block; width:100%; margin:0 0 10px; }
 /* Foods you've logged before, shown before searching and at the top of results. */
 .recent-head { margin:16px 0 0; }
 .result-name small.recent-tag { color:#8f7861; }
+/* Sign-in links (forgot password, switch form) and the new-password sheet. */
+.auth-links { display:flex; flex-wrap:wrap; gap:4px 16px; }
+.auth-form { display:grid; gap:12px; } .auth-form .note { margin:0; }
+.auth-form label { display:grid; gap:4px; font-size:.85rem; color:var(--mute); text-transform:lowercase; }

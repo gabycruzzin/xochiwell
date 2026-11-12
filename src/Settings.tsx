@@ -16,6 +16,7 @@ type Props = {
   onOpenReport: () => void;
   onOpenWeight: () => void;
   onDeleteWeights: () => Promise<void>;
+  onChangePassword: () => void;
   onSignOut: () => void;
   onDeleteAccount: () => Promise<void>;
   onClose: () => void;
@@ -116,6 +117,7 @@ export default function Settings(p: Props) {
           </div>
         ) : (
           <div className="settings-links">
+            <button className="link" onClick={p.onChangePassword}>change password</button>
             <button className="link" onClick={p.onSignOut}>sign out</button>
             <button className="link" onClick={() => setConfirm("account")}>delete account</button>
           </div>

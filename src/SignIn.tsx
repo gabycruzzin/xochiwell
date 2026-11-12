@@ -1,19 +1,19 @@
 import { useState, type FormEvent } from "react";
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "./db";
+import PasswordInput from "./PasswordInput";
 
-// Where the "confirm your email" link lands: the iOS app itself, or this site in a browser. Both must be listed
+// Where the "confirm your email" and "reset your password" links land: the iOS app itself, or this site in a browser. Both must be listed
 // under Supabase → Authentication → URL Configuration → Redirect URLs.
 export const CONFIRM_REDIRECT = Capacitor.isNativePlatform() ? "xochiwell://auth" : window.location.origin;
 
 export default function SignIn({ notice = "" }: { notice?: string }) {
-  const [mode, setMode] = useState<"in" | "up">("in");
+  const [mode, setMode] = useState<"in" | "up" | "reset">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [unconfirmed, setUnconfirmed] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -21,6 +21,13 @@ export default function SignIn({ notice = "" }: { notice?: string }) {
     setBusy(true);
     setMessage("");
     setUnconfirmed(false);
+    if (mode === "reset") {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: CONFIRM_REDIRECT });
+      setBusy(false);
+      // Same answer whether or not the email has an account, so the form can't be used to look up who's signed up.
+      return setMessage(error ? error.message
+        : "If there's an account for that email, we sent a link to reset your password. Check your inbox (and spam).");
+    }
     const { data, error } =
       mode === "in"
         ? await supabase.auth.signInWithPassword({ email, password })
@@ -39,6 +46,12 @@ export default function SignIn({ notice = "" }: { notice?: string }) {
     if (mode === "up" && !data.session) setMessage("Check your email for a link to confirm your account, then sign in.");
   };
 
+  // Each form starts empty, except "forgot password", which keeps the email you'd already typed.
+  const switchTo = (next: typeof mode, keepEmail = false) => {
+    setMode(next); setMessage(""); setUnconfirmed(false); setPassword("");
+    if (!keepEmail) setEmail("");
+  };
+
   const resend = async () => {
     if (!supabase) return;
     setBusy(true);
@@ -50,32 +63,31 @@ export default function SignIn({ notice = "" }: { notice?: string }) {
 
   return (
     <section className="auth">
-      <h2>{mode === "in" ? "Sign in" : "Create your account"}</h2>
-      <p className="note">Your food diary is saved to your account, so it's there on any device.</p>
+      <h2>{mode === "in" ? "Sign in" : mode === "up" ? "Create your account" : "Reset your password"}</h2>
+      <p className="note">{mode === "reset"
+        ? "Enter the email you signed up with and we'll send you a link to choose a new password."
+        : "Your food diary is saved to your account, so it's there on any device."}</p>
       <form onSubmit={submit}>
         <label>Email
           <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </label>
-        <label>Password
-          {/* Show lets you check what you typed, especially when creating a password. */}
-          <span className="password-field">
-            <input type={showPassword ? "text" : "password"} autoComplete={mode === "in" ? "current-password" : "new-password"} required minLength={6}
-              autoCapitalize="none" autoCorrect="off" spellCheck={false}
-              value={password} onChange={(e) => setPassword(e.target.value)} />
-            <button type="button" className="link show-password" onClick={() => setShowPassword((v) => !v)}
-              onMouseDown={(e) => e.preventDefault()} /* keep typing focus (and the phone keyboard) in the password box */
-              aria-pressed={showPassword} aria-label={showPassword ? "Hide password" : "Show password"}>
-              {showPassword ? "hide" : "show"}
-            </button>
-          </span>
-        </label>
-        <button type="submit" disabled={busy}>{busy ? "One moment…" : mode === "in" ? "Sign in" : "Create account"}</button>
+        {mode !== "reset" && (
+          <label>Password
+            <PasswordInput key={mode} value={password} onChange={setPassword} autoComplete={mode === "in" ? "current-password" : "new-password"} />
+          </label>
+        )}
+        <button type="submit" disabled={busy}>
+          {busy ? "One moment…" : mode === "in" ? "Sign in" : mode === "up" ? "Create account" : "Send reset link"}
+        </button>
       </form>
       {(message || notice) && <p className="note" role="status">{message || notice}</p>}
       {unconfirmed && <button type="button" className="link" disabled={busy} onClick={resend}>Resend the verification email</button>}
-      <button type="button" className="link" onClick={() => { setMode(mode === "in" ? "up" : "in"); setMessage(""); setUnconfirmed(false); setEmail(""); setPassword(""); setShowPassword(false); }}>
-        {mode === "in" ? "New here? Create an account" : "Already have an account? Sign in"}
-      </button>
+      <div className="auth-links">
+        {mode === "in" && <button type="button" className="link" onClick={() => switchTo("reset", true)}>Forgot password?</button>}
+        <button type="button" className="link" onClick={() => switchTo(mode === "in" ? "up" : "in")}>
+          {mode === "in" ? "New here? Create an account" : mode === "up" ? "Already have an account? Sign in" : "Back to sign in"}
+        </button>
+      </div>
     </section>
   );
 }

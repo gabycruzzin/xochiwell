@@ -66,17 +66,19 @@ export async function loadPastMeals(meal: string, beforeDay: string, limit = 5):
 
 // Signs in from an email link that opened the app (xochiwell://auth…). Supabase puts either a one-time code in the
 // query (PKCE) or the session tokens in the #fragment, or an error if the link expired or was already used.
-export async function signInFromLink(url: string) {
+// Resolves to "recovery" for a reset-password link, so the app can ask for the new password.
+export async function signInFromLink(url: string): Promise<"recovery" | "signed-in"> {
   const [beforeHash, hash = ""] = url.split("#");
   const query = new URLSearchParams(beforeHash.split("?")[1] ?? ""), frag = new URLSearchParams(hash);
   const code = query.get("code");
   const access_token = frag.get("access_token"), refresh_token = frag.get("refresh_token");
   const failed = frag.get("error_description") ?? query.get("error_description");
-  if (failed) throw new Error(`${failed.replace(/\+/g, " ")}. Sign in below, or create your account again for a new link.`);
+  if (failed) throw new Error(`${failed.replace(/\+/g, " ")}. Sign in below, or ask for a new link.`);
   const { error } = code ? await db().auth.exchangeCodeForSession(code)
     : access_token && refresh_token ? await db().auth.setSession({ access_token, refresh_token })
     : { error: null };
   if (error) throw error;
+  return frag.get("type") === "recovery" || query.get("type") === "recovery" ? "recovery" : "signed-in";
 }
 
 // A food rebuilt from a diary entry, so things you've logged before can be found and added again.
