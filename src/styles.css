@@ -232,3 +232,18 @@ button.open-weight { display:block; width:100%; margin:0 0 10px; }
 .auth-links { display:flex; flex-wrap:wrap; gap:4px 16px; }
 .auth-form { display:grid; gap:12px; } .auth-form .note { margin:0; }
 .auth-form label { display:grid; gap:4px; font-size:.85rem; color:var(--mute); text-transform:lowercase; }
+/* Add your own food: "can't find it?" links and the form (typed in, or filled from a label photo). */
+.create-food { color:var(--mute); font-size:.9rem; margin:14px 0 4px; } .create-food .link { padding:4px 0; }
+.food-form { display:grid; gap:12px; margin-top:16px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+.food-form h3 { margin:0; } .food-form .note { margin:0; }
+.food-form label, .food-form legend { display:grid; gap:4px; font-size:.85rem; color:var(--mute); text-transform:lowercase; }
+.food-form fieldset { border:0; padding:0; margin:0; min-width:0; } .food-form legend { padding:0; margin-bottom:4px; }
+.food-form input { width:100%; min-width:0; }
+.serving-row { display:grid; grid-template-columns:1fr 84px auto; gap:8px; }
+.macro-fields { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+.food-form input.missing { border-color:#d9a441; background:#fdf6e6; }
+.food-form .error { color:#a0442c; }
+.own-food-actions { display:flex; gap:16px; } .own-food-actions .link { font-size:.85rem; text-transform:lowercase; }
+.result-detail .confirm-delete { margin-top:4px; }
+.form-actions { display:flex; justify-content:flex-end; align-items:center; gap:16px; }
+@media (max-width:520px) { .macro-fields { grid-template-columns:repeat(2,minmax(0,1fr)); } .serving-row { grid-template-columns:1fr 76px auto; } }

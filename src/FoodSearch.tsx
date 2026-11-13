@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent, type InputHTMLAttributes } from "react";
 import { Capacitor } from "@capacitor/core";
 import { lookupBarcode, matchesQuery, PER_OZ, searchFoods, type Food, type Macros, type Serving } from "./api";
-import { loadRecentFoods, recentFromEntry, type NewEntry } from "./db";
+import { deleteCustomFood, loadCustomFoods, loadRecentFoods, recentFromEntry, type NewEntry } from "./db";
+import FoodForm from "./FoodForm";
+import type { LabelValues } from "./labelParse";
+import { scanNutritionLabel } from "./labelReader";
 
 // The barcode scanner uses the phone's camera, so it's offered in the iOS app only.
 const canScan = Capacitor.isNativePlatform();
@@ -68,9 +71,21 @@ export default function FoodSearch({
   const [qty, setQty] = useState(1);
   const [prefMode, setPrefMode] = useState<Mode>(loadMode);
   const [recents, setRecents] = useState<Food[]>([]);
-  useEffect(() => { loadRecentFoods().then(setRecents).catch(() => {}); }, []);
-  // Foods you've logged before whose names match what you've typed so far.
-  const recentMatches = query.trim() ? recents.filter((f) => matchesQuery(f.name, query)) : recents;
+  const [customs, setCustoms] = useState<Food[]>([]);
+  useEffect(() => {
+    loadRecentFoods().then(setRecents).catch(() => {});
+    loadCustomFoods().then(setCustoms).catch(() => {});
+  }, []);
+  // Your own foods, then foods you've logged before (a logged custom food is listed once, as yours).
+  const customNames = new Set(customs.map((f) => f.name.trim().toLowerCase()));
+  const mine = [...customs, ...recents.filter((f) => !customNames.has(f.name.trim().toLowerCase()))];
+  // The ones whose names match what you've typed so far.
+  const recentMatches = query.trim() ? mine.filter((f) => matchesQuery(f.name, query)) : mine;
+  // The add-your-own-food form, with what a label photo showed if it came from one, or one of your foods to edit.
+  const [creating, setCreating] = useState<{ scanned?: LabelValues; editing?: Food } | null>(null);
+  // Your food waiting for "yes, delete it", and whether that's in progress.
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [pickedMeal, setPickedMeal] = useState(MEALS[0]);
   const searchCtrl = useRef<AbortController>();
   const meal = fixedMeal ?? pickedMeal;
@@ -87,8 +102,8 @@ export default function FoodSearch({
     try {
       const foods = await searchFoods(q, ctrl.signal);
       if (ctrl.signal.aborted) return; // a newer search started (the app's native networking ignores aborts)
-      const mine = recents.filter((f) => matchesQuery(f.name, q)).slice(0, 3); // yours first: you know they're right
-      setResults([...mine, ...foods]);
+      const yours = mine.filter((f) => matchesQuery(f.name, q)).slice(0, 3); // yours first: you know they're right
+      setResults([...yours, ...foods]);
       setStatus(foods.length ? "" : "No foods found. Try a simpler name.");
     } catch (e) {
       if ((e as Error).name !== "AbortError") setStatus("Search failed. Check your connection and try again.");
@@ -137,6 +152,45 @@ export default function FoodSearch({
     }
   };
 
+  // Takes or picks a photo of a nutrition label and opens the add-your-own-food form with what it read.
+  const scanLabel = async () => {
+    searchCtrl.current?.abort();
+    setStatus("");
+    const scan = await scanNutritionLabel();
+    if ("values" in scan) return setCreating({ scanned: scan.values });
+    if (scan.error === "camera-denied") setStatus("Xochiwell needs camera access to photograph a label. Turn it on in Settings → Xochiwell → Camera, or choose a photo from your library.");
+    else if (scan.error === "unreadable") setStatus("Couldn't read that photo. Try again, or enter the food yourself.");
+  };
+  const saved = (f: Food) => {
+    const edited = creating?.editing;
+    setCreating(null);
+    if (edited) {
+      setCustoms((c) => c.map((x) => (x.id === f.id ? f : x)));
+      setResults((r) => (r.length ? r.map((x) => (x.id === f.id ? f : x)) : r));
+      open(f);
+      setStatus(`Updated ${f.name}.`);
+    } else {
+      setCustoms((c) => [f, ...c]);
+      setResults([f]);
+      open(f);
+      setStatus(`Saved ${f.name}. Pick an amount to add it.`);
+    }
+  };
+  const remove = async (f: Food) => {
+    setDeleting(true);
+    try {
+      await deleteCustomFood(f.id);
+      setCustoms((c) => c.filter((x) => x.id !== f.id));
+      setResults((r) => r.filter((x) => x.id !== f.id));
+      setSelected(null);
+      setStatus(`Deleted ${f.name}. Anything you've already logged stays in your diary.`);
+    } catch {
+      setStatus(`Couldn't delete ${f.name}. Check your connection and try again.`);
+    }
+    setConfirmDelete(null);
+    setDeleting(false);
+  };
+
   // Ounces only make sense for foods measured in g or ml; anything else is entered in servings.
   const modeFor = (s: Serving): Mode => (prefMode === "serving" || PER_OZ[s.unit] ? prefMode : "serving");
   const unitLabel = (mode: Mode, s: Serving, n: number) =>
@@ -149,6 +203,7 @@ export default function FoodSearch({
   const open = (f: Food) => {
     const s = servingOf(f, customServings);
     setSelected(f.id);
+    setConfirmDelete(null);
     setQty(fromBase(s.amount, modeFor(s), s)); // starts at one serving, in whichever unit you last used
   };
   const toggle = (f: Food) => (selected === f.id ? setSelected(null) : open(f));
@@ -183,6 +238,10 @@ export default function FoodSearch({
         {canScan && <button type="button" className="ghost scan" onClick={scan} aria-label="Scan a barcode">Scan</button>}
       </form>
       {status && <p className="note" role="status">{status}</p>}
+      {creating ? (
+        <FoodForm key={creating.editing?.id ?? "new"} name={query.trim()} scanned={creating.scanned} editing={creating.editing}
+          onSaved={saved} onCancel={() => setCreating(null)} />
+      ) : (<>
       {!results.length && recentMatches.length > 0 && <h3 className="recent-head">your recent foods</h3>}
       <ul className="results">
         {(results.length ? results : recentMatches.slice(0, 8)).map((f) => {
@@ -195,7 +254,7 @@ export default function FoodSearch({
           return (
             <li key={f.id} className={isOpen ? "open" : ""}>
               <button type="button" className="result" onClick={() => toggle(f)} aria-expanded={isOpen}>
-                <span className="result-name"><b>{f.name}</b>{f.recent ? <small className="recent-tag">you've logged this</small> : f.brand && <small>{f.brand}</small>}</span>
+                <span className="result-name"><b>{f.name}</b>{f.recent || f.custom ? <small className="recent-tag">{f.custom ? "your food" : "you've logged this"}</small> : f.brand && <small>{f.brand}</small>}</span>
                 <span className="result-kcal">{per.kcal} kcal</span>
               </button>
               {isOpen && (
@@ -236,12 +295,32 @@ export default function FoodSearch({
                   <button className="add" onClick={() => add(f)} disabled={disabled || !(qty > 0)}>
                     Add {mode === "serving" ? `${qty} (${Math.round(base)} ${s.unit})` : `${round1(qty)} ${unitLabel(mode, s, qty)}`} · {scale(f.per100g, base).kcal} kcal
                   </button>
+                  {f.custom && (confirmDelete === f.id ? (
+                    <div className="confirm-delete">
+                      <p>Delete {f.name} from your foods? It won't show up in search anymore. Anything you've already logged stays in your diary.</p>
+                      <div className="form-actions">
+                        <button type="button" className="link" onClick={() => setConfirmDelete(null)} disabled={deleting}>keep it</button>
+                        <button type="button" className="danger" onClick={() => remove(f)} disabled={deleting}>{deleting ? "Deleting…" : "Delete food"}</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="own-food-actions">
+                      <button type="button" className="link" onClick={() => { setStatus(""); setCreating({ editing: f }); }}>edit this food</button>
+                      <button type="button" className="link" onClick={() => setConfirmDelete(f.id)}>delete</button>
+                    </div>
+                  ))}
                 </div>
               )}
             </li>
           );
         })}
       </ul>
+      <p className="create-food">
+        Can't find it?{" "}
+        {canScan && <><button type="button" className="link" onClick={scanLabel}>Scan the nutrition label</button> or{" "}</>}
+        <button type="button" className="link" onClick={() => setCreating({})}>{canScan ? "enter it yourself" : "Add it yourself"}</button>
+      </p>
+      </>)}
     </>
   );
 }

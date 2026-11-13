@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { PER_OZ, type Food, type Macros } from "./api";
+import { PER_OZ, type CustomFoodValues, type Food, type Macros } from "./api";
 
 // Set these in .env.local (see .env.example). The anon key is meant to be public; row level security
 // in supabase/schema.sql is what keeps each user's data private.
@@ -114,6 +114,59 @@ export async function loadRecentFoods(): Promise<Food[]> {
     if (food) byName.set(key, { food, count: 1 });
   }
   return [...byName.values()].sort((a, b) => b.count - a.count).map((x) => x.food); // stable: ties stay newest first
+}
+
+// A food you add yourself, with the numbers for one serving as the label prints them.
+export type NewCustomFood = CustomFoodValues;
+type CustomFoodRow = Macros & { id: string; name: string; serving_label: string | null; serving_amount: number; serving_unit: string };
+const CUSTOM_COLUMNS = "id, name, serving_label, serving_amount, serving_unit, kcal, protein, carbs, fat";
+
+function customToFood(r: CustomFoodRow): Food {
+  const amount = Number(r.serving_amount);
+  const per = (v: number) => Math.round((Number(v) * 1000) / amount) / 10;
+  const label = r.serving_label?.trim();
+  return {
+    id: `custom:${r.id}`,
+    name: r.name,
+    custom: {
+      name: r.name, servingLabel: label ?? "", servingAmount: amount, servingUnit: r.serving_unit === "ml" ? "ml" : "g",
+      kcal: Number(r.kcal), protein: Number(r.protein), carbs: Number(r.carbs), fat: Number(r.fat),
+    },
+    per100g: { kcal: per(r.kcal), protein: per(r.protein), carbs: per(r.carbs), fat: per(r.fat) },
+    serving: { amount, unit: r.serving_unit, label: label ? `${label} (${amount} ${r.serving_unit})` : `${amount} ${r.serving_unit}` },
+  };
+}
+
+// Your own foods, newest first. Empty (rather than an error) if the custom_foods table hasn't been created yet.
+export async function loadCustomFoods(): Promise<Food[]> {
+  const { data, error } = await db().from("custom_foods").select(CUSTOM_COLUMNS).order("created_at", { ascending: false });
+  if (error) { console.warn("Couldn't load your foods", error.message); return []; }
+  return data.map(customToFood);
+}
+
+const customRow = (f: NewCustomFood) => ({
+  name: f.name.trim(), serving_label: f.servingLabel.trim() || null, serving_amount: f.servingAmount, serving_unit: f.servingUnit,
+  kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat,
+});
+const rowId = (foodId: string) => foodId.replace(/^custom:/, "");
+
+export async function saveCustomFood(f: NewCustomFood): Promise<Food> {
+  const { data, error } = await db().from("custom_foods").insert(customRow(f)).select(CUSTOM_COLUMNS).single();
+  if (error) throw error;
+  return customToFood(data);
+}
+
+// Changes one of your foods. Entries already in the diary keep the numbers they were logged with.
+export async function updateCustomFood(foodId: string, f: NewCustomFood): Promise<Food> {
+  const { data, error } = await db().from("custom_foods").update(customRow(f)).eq("id", rowId(foodId)).select(CUSTOM_COLUMNS).single();
+  if (error) throw error;
+  return customToFood(data);
+}
+
+// Removes one of your foods from search. Entries already in the diary stay.
+export async function deleteCustomFood(foodId: string) {
+  const { error } = await db().from("custom_foods").delete().eq("id", rowId(foodId));
+  if (error) throw error;
 }
 
 export async function removeEntry(id: string) {

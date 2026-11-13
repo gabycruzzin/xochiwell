@@ -38,7 +38,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Xochiwell uses the camera to scan food barcodes, so you can log packaged foods without typing.</string>
+	<string>Xochiwell uses the camera to scan food barcodes and nutrition labels, so you can log foods without typing.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

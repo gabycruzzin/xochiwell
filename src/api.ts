@@ -3,8 +3,13 @@ import { Capacitor } from "@capacitor/core";
 export type Macros = { kcal: number; protein: number; carbs: number; fat: number };
 // serving: one serving as the label prints it (e.g. "1 container (150 g)"), plus its weight or volume.
 export type Serving = { amount: number; unit: string; label: string };
-// recent: a food rebuilt from your own diary rather than from the food database.
-export type Food = { id: string; name: string; brand?: string; per100g: Macros; serving?: Serving; recent?: boolean };
+// recent: a food rebuilt from your own diary rather than from the food database; custom: one you added yourself.
+export type Food = {
+  id: string; name: string; brand?: string; per100g: Macros; serving?: Serving; recent?: boolean;
+  // A food you added yourself, with the numbers for one serving as you entered them (so it can be edited).
+  custom?: CustomFoodValues;
+};
+export type CustomFoodValues = Macros & { name: string; servingLabel: string; servingAmount: number; servingUnit: "g" | "ml" };
 
 // Ounces per food unit: weight ounces for foods measured in grams, fluid ounces for drinks in ml.
 export const PER_OZ: Record<string, number> = { g: 28.3495, ml: 29.5735 };
